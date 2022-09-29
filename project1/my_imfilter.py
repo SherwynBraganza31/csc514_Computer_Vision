@@ -123,13 +123,7 @@ if __name__ == '__main__':
     impulse, filtered = im_correlate(img1, kernel)
     impulse_2, filtered_conv = my_imfilter(img1, kernel)
 
-    plt.title('Original')
-    plt.imshow(impulse)
+    joined = np.hstack((img1, impulse, filtered, filtered_conv))
+    plt.title('Original -> Impulse -> Correlated -> Convolved')
+    plt.imshow(joined)
     plt.show()
-    plt.title('Correlated with Edge detection kernel')
-    plt.imshow(skimage.color.rgb2gray(filtered), cmap='gray')
-    plt.show()
-    plt.title('Convolved with Edge detection kernel')
-    plt.imshow(skimage.color.rgb2gray(filtered_conv), cmap='gray')
-    plt.show()
-
