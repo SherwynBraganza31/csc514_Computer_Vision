@@ -32,16 +32,16 @@ def my_imfilter(image: np.ndarray, kernel: np.ndarray) -> (np.ndarray, np.ndarra
             @:return    impulse (np.matrix) : Impulse Convolved Version of the Image (using impulse kernel)
             @:return    filter (np.matrix)  : Kernel Convolved Version of the Image
     """
-    if kernel.shape[0]%2 == 0 or kernel.shape[1]%2 == 1:
+    if kernel.shape[0]%2 == 0 or kernel.shape[1]%2 == 0:
         raise Exception('Kernel with even dimensions provided.')
 
     # flip the image along rows and cols. Dont flip channels if they exist
     image = np.flip(np.flip(image, axis=1),axis=0)
 
     # call correlation function and get the kernel correlated image as well as the impulse version of it
-    impulse, filtered = im_correlate(np.matrix(image), kernel)
-    impulse, filtered = np.matrix(np.flip(np.flip(impulse, axis=1),axis=0)), \
-                        np.matrix(np.flip(np.flip(filtered, axis=1),axis=0))
+    impulse, filtered = im_correlate(image, kernel)
+    impulse, filtered = np.flip(np.flip(impulse, axis=1),axis=0), \
+                        np.flip(np.flip(filtered, axis=1),axis=0)
 
     return impulse, filtered
 
@@ -78,7 +78,7 @@ def im_correlate(image: np.ndarray, kernel: np.ndarray) -> (np.ndarray, np.ndarr
             @:return    filter (np.matrix)  : Kernel Correlated Version of the Image
 
     """
-    if kernel.shape[0]%2 == 0 or kernel.shape[1]%2 == 1:
+    if kernel.shape[0]%2 == 0 or kernel.shape[1]%2 == 0:
         raise Exception('Kernel with even dimensions provided.')
 
     image = skimage.img_as_float32(image) # convert to floats in [0,1] to make computations uniform
@@ -118,12 +118,18 @@ if __name__ == '__main__':
     img1 = io.imread('data/bicycle.bmp', as_gray=False)
     kernel = np.asarray([[-1,0,1],
                          [-2,0,2],
-                         [-1,0,-1]])
+                         [-1,0,1]])
 
     impulse, filtered = im_correlate(img1, kernel)
+    impulse_2, filtered_conv = my_imfilter(img1, kernel)
 
+    plt.title('Original')
     plt.imshow(impulse)
     plt.show()
+    plt.title('Correlated with Edge detection kernel')
     plt.imshow(skimage.color.rgb2gray(filtered), cmap='gray')
+    plt.show()
+    plt.title('Convolved with Edge detection kernel')
+    plt.imshow(skimage.color.rgb2gray(filtered_conv), cmap='gray')
     plt.show()
 
