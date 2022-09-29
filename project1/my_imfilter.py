@@ -18,9 +18,9 @@ def my_imfilter(image: np.ndarray, kernel: np.ndarray) -> (np.ndarray, np.ndarra
         like signal.convolve2D from the scipy library. The kernel used for convolution
         is presented by the user. This function is designed to handle both rgb and grayscale images.
 
-        It exploits the fact that convolution is basically correlation of the flipped image.
-        It therefore flips the input image and passes it to the function that gives the correlational
-        version of an image with the kernel.
+        It exploits the fact that convolution is basically correlation using a flipped kernel.
+        It therefore flips the kernel and passes it to the function that gives the correlational
+        version of an image with the flipped kernel.
 
         The function returns two np.matrix(s), one corresponding to the image convolved
         with an impulse response kernel and the other convolved with the kernel provided.
@@ -35,13 +35,11 @@ def my_imfilter(image: np.ndarray, kernel: np.ndarray) -> (np.ndarray, np.ndarra
     if kernel.shape[0]%2 == 0 or kernel.shape[1]%2 == 0:
         raise Exception('Kernel with even dimensions provided.')
 
-    # flip the image along rows and cols. Dont flip channels if they exist
-    image = np.flip(np.flip(image, axis=1),axis=0)
+    # flip the kernel along rows and cols
+    kernel = np.flip(np.flip(kernel, axis=1),axis=0)
 
     # call correlation function and get the kernel correlated image as well as the impulse version of it
     impulse, filtered = im_correlate(image, kernel)
-    impulse, filtered = np.flip(np.flip(impulse, axis=1),axis=0), \
-                        np.flip(np.flip(filtered, axis=1),axis=0)
 
     return impulse, filtered
 
@@ -116,14 +114,29 @@ def im_correlate(image: np.ndarray, kernel: np.ndarray) -> (np.ndarray, np.ndarr
 
 if __name__ == '__main__':
     img1 = io.imread('data/bicycle.bmp', as_gray=False)
-    kernel = np.asarray([[-1,0,1],
+    sobel = np.asarray([[-1,0,1],
                          [-2,0,2],
                          [-1,0,1]])
+    sharpen = np.array([[0, -1, 0],
+                        [-1, 5, -1],
+                        [0, -1, 0]])
+    emboss = np.array([[-2, -1, 0],
+                        [-1, 1, 1],
+                        [0, 1, 2]])
+    boxblur = (1 / 9.0) * np.array([[1, 1, 1],
+                                    [1, 1, 1],
+                                    [1, 1, 1]])
 
-    impulse, filtered = im_correlate(img1, kernel)
-    impulse_2, filtered_conv = my_imfilter(img1, kernel)
+    gaussian_1D = (1/36)*np.asarray([1,2,3,4,5,6,5,4,3,2,1]).reshape(-1,1)
+    gaussian = gaussian_1D.T * gaussian_1D
 
-    joined = np.hstack((img1, impulse, filtered, filtered_conv))
-    plt.title('Original -> Impulse -> Correlated -> Convolved')
+    img_sobel = my_imfilter(img1, sobel)[1]
+    img_sharpen = my_imfilter(img1, sharpen)[1]
+    img_emboss = my_imfilter(img1, emboss)[1]
+    img_boxblur = my_imfilter(img1, boxblur)[1]
+    img_gaussian = my_imfilter(img1, gaussian)[1]
+
+    joined = np.hstack((img1, img_sobel, img_sharpen, img_emboss, img_boxblur, img_gaussian))
+    plt.title('Original --> Sobel --> Sharpen --> Emboss --> Boxblur --> Gaussian')
     plt.imshow(joined)
     plt.show()
