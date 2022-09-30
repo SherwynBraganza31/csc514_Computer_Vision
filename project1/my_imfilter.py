@@ -111,9 +111,22 @@ def im_correlate(image: np.ndarray, kernel: np.ndarray) -> (np.ndarray, np.ndarr
     # clip images and convert them back to ubytes before returning
     return skimage.img_as_ubyte(impulse.clip(0,1)), skimage.img_as_ubyte(filtered.clip(0,1))
 
+def hybridise(img1, img2):
+    N = 17
+    gaussian2_1D = (1 / N ** 2) * np.asarray(np.linspace(1, N, N) + np.linspace(N - 1, 1, N)).reshape(-1, 1)
+    gaussian2 = gaussian2_1D.T * gaussian2_1D
+
+    img_gaussian = my_imfilter(img1, gaussian2)[1]
+    img_gaussian_2 = my_imfilter(img2, gaussian2)[1]
+    hybrid = skimage.img_as_ubyte((skimage.img_as_float32(img_gaussian)
+                                   + skimage.img_as_float32(img2) - skimage.img_as_float32(img_gaussian_2)).clip(0, 1))
+
+    return hybrid
+
 
 if __name__ == '__main__':
-    img1 = io.imread('data/bicycle.bmp', as_gray=False)
+    img1 = io.imread('data/dog.bmp', as_gray=False)
+    img2 = io.imread('data/cat.bmp', as_gray=False)
     sobel = np.asarray([[-1,0,1],
                          [-2,0,2],
                          [-1,0,1]])
@@ -127,7 +140,7 @@ if __name__ == '__main__':
                                     [1, 1, 1],
                                     [1, 1, 1]])
 
-    gaussian_1D = (1/36)*np.asarray([1,2,3,4,5,6,5,4,3,2,1]).reshape(-1,1)
+    gaussian_1D = (1/16)*np.asarray([1,2,2,6,2,2,1]).reshape(-1,1)
     gaussian = gaussian_1D.T * gaussian_1D
 
     img_sobel = my_imfilter(img1, sobel)[1]
