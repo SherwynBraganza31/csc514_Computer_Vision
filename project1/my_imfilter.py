@@ -4,7 +4,7 @@ from skimage import io
 import matplotlib.pyplot as plt
 
 
-def my_imfilter(image: np.ndarray, kernel: np.ndarray) -> (np.ndarray, np.ndarray):
+def my_imfilter(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     """
         Image Convolution Filter
 
@@ -13,6 +13,7 @@ def my_imfilter(image: np.ndarray, kernel: np.ndarray) -> (np.ndarray, np.ndarra
         Sept 28, 2020 - Added more descriptive comments.
         Sept 28, 2020 - Finished off most of convolve
         Sept 28, 2020 - Compared results with signal.convolve2D
+        Sept 30, 2020 - Changes made to return only filtered image
 
         Function that implements convolution through correlation. Designed to work
         like signal.convolve2D from the scipy library. The kernel used for convolution
@@ -24,11 +25,11 @@ def my_imfilter(image: np.ndarray, kernel: np.ndarray) -> (np.ndarray, np.ndarra
 
         The function returns an np.ndarray, corresponding to the image correlated with the kernel provided.
 
-            @:param     image (np.matrix)   : Numpy matrix containing image data
-            @:param     kernel (np.matrix)  : Numpy matrix containing data for an
+            :param image: Numpy matrix containing image data
+            :param kernel: Numpy matrix containing data for an
                                               odd dimension kernel
 
-            @:return    filter (np.matrix)  : Kernel Convolved Version of the Image
+            :return filter: Kernel Convolved Version of the Image
     """
     if kernel.shape[0] % 2 == 0 or kernel.shape[1] % 2 == 0:
         raise Exception('Kernel with even dimensions provided.')
@@ -42,7 +43,7 @@ def my_imfilter(image: np.ndarray, kernel: np.ndarray) -> (np.ndarray, np.ndarra
     return filtered
 
 
-def im_correlate(image: np.ndarray, kernel: np.ndarray) -> (np.ndarray):
+def im_correlate(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     """
         Image Correlation Filter
 
@@ -51,6 +52,7 @@ def im_correlate(image: np.ndarray, kernel: np.ndarray) -> (np.ndarray):
         Sept 28, 2020 - Added more descriptive comments.
         Sept 28, 2020 - Finished off most of correlate
         Sept 28, 2020 - Compared results with signal.correlate2D
+        Sept 30, 2020 - Changes made to return only filtered image
 
         Function that implements correlation image processing. Designed to work
         like signal.correlate2D from the scipy library. The kernel used for correlation
@@ -65,11 +67,10 @@ def im_correlate(image: np.ndarray, kernel: np.ndarray) -> (np.ndarray):
 
         TODO - Try to use logical indexing insted of loops
 
-            @:param     image (np.matrix)   : Numpy matrix containing image data
-            @:param     kernel (np.matrix)  : Numpy matrix containing data for an
-                                              odd dimension kernel
+            :param image: Numpy matrix containing image data
+            :param kernel: Numpy matrix containing data for an odd dimension kernel
 
-            @:return    filter (np.matrix)  : Kernel Correlated Version of the Image
+            :return filter: Kernel Correlated Version of the Image
     """
     if kernel.shape[0] % 2 == 0 or kernel.shape[1] % 2 == 0:
         raise Exception('Kernel with even dimensions provided.')
@@ -100,14 +101,31 @@ def im_correlate(image: np.ndarray, kernel: np.ndarray) -> (np.ndarray):
     return skimage.img_as_ubyte(filtered.clip(0, 1))
 
 
-def hybridise(image1: np.ndarray, image2: np.ndarray, fourier: bool):
+def hybridise(image1: np.ndarray, image2: np.ndarray, sigma1: int, sigma2: int, fourier: bool):
+    """
+        Hybrid Image Generator
+
+        Author: Sherwyn Braganza
+        29 Sept, 2022 - Implemented a rudimentary hybrid image generator
+                        that uses Spatial Convolution
+        30 Sept, 2022 - Implemented hybrid image rescaling and stacking
+        30 Sept, 2022 - Expanded it to use Spatial Convolution and
+                        Fourier Domain Hadamard (fourier domain still need to be coded up)
+
+        :param image1: The low pass intended image
+        :param image2: The high pass intended image
+        :param sigma1: The sigma value corresponding to the low pass image
+        :param sigma2: The sigma value corresponding to the high pass image
+        :param fourier: False if you want to use Spatial Convolution, True
+                        if you want to use Fourier Domain Processing
+
+        :return: The stacked hybrid image
+    """
     hybrid = np.asarray([])
+    gaussian_low = generateGaussianKernel(sigma1)
+    gaussian_high = generateGaussianKernel(sigma2)
 
     if not fourier:
-        sigma = 7
-        gaussian_low = generateGaussianKernel(sigma)
-        gaussian_high = generateGaussianKernel(sigma)
-
         lowpass_image = my_imfilter(image1, gaussian_low)
         lowpass_image2 = my_imfilter(image2, gaussian_high)
 
@@ -119,16 +137,21 @@ def hybridise(image1: np.ndarray, image2: np.ndarray, fourier: bool):
     #else:
         # TODO - Implement fourier based hybrid image generation
 
-    image_stack = []
-    image_stack.append(hybrid)
 
-    for i in range(0, 3):
+
+    #######################################
+    # Image stacking and padding section
+    #######################################
+    image_stack = [hybrid]
+
+    # create scale down versions of the original
+    for i in range(0, 4):
         image_stack.append(skimage.img_as_ubyte(
             skimage.transform.rescale(image_stack[i], 0.5, anti_aliasing=True, channel_axis=2)
         ))
 
-    # padding the rescaled images
-    for i in range(1, 4):
+    # padding the rescaled images along axis 0 to make them the same size vertically
+    for i in range(1, 5):
         image_stack[i] = np.pad(
             image_stack[i],
             ((image_stack[0].shape[0] - image_stack[i].shape[0], 0),
@@ -138,12 +161,39 @@ def hybridise(image1: np.ndarray, image2: np.ndarray, fourier: bool):
             constant_values=255
         )
 
+    # padding along axis 1
+    for i in range(1, 5):
+        image_stack[i] = np.pad(
+            image_stack[i],
+            ((0, 0),
+             (5, 0),
+             (0, 0)),
+            mode='constant',
+            constant_values=255
+        )
+
     return np.hstack(image_stack)
 
 
 def generateGaussianKernel(sigma: float) -> np.ndarray:
+    """
+        Generates a 2-D Gaussian Kernel
+
+        Author: Sherwyn Braganza
+        Sept 29, 2020 - Added function and base code for generating it
+        Sept 29, 2020 - Implemented a weighted mean based kernel generator
+        Sept 30, 2020 - Changed implementation to generate a true gaussian
+                        based kernel
+
+        Generates a 1D Gaussian distribution from the Gaussian equation
+        using the value of sigma. Matrix multiplies the transpose of
+        the 1D Gaussian with itself to form a 2D square Gaussian kernel
+
+        :param sigma: The standard deviation of the gaussian
+        :return: kernel: The 2D Gaussian kernel generated
+    """
     size = int(8 * sigma + 1)
-    # need an odd sized kernel
+    # enforce an odd sized kernel
     if not size % 2:
         size = size + 1
 
@@ -190,5 +240,5 @@ if __name__ == '__main__':
     # plt.imshow(joined)
     # plt.show()
 
-    hybrid = hybridise(img1, img2, fourier=False)
-    plt.imsave('hybrid.jpg', hybrid)
+    new_image = hybridise(img1, img2, sigma1=7, sigma2=5, fourier=False)
+    plt.imsave('hybrid.jpg', new_image)
