@@ -9,11 +9,11 @@ def my_imfilter(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
         Image Convolution Filter
 
         Author: Sherwyn Braganza
-        Sept 28, 2020 - Initial Creation
-        Sept 28, 2020 - Added more descriptive comments.
-        Sept 28, 2020 - Finished off most of convolve
-        Sept 28, 2020 - Compared results with signal.convolve2D
-        Sept 30, 2020 - Changes made to return only filtered image
+        Sept 28, 2022 - Initial Creation
+        Sept 28, 2022 - Added more descriptive comments.
+        Sept 28, 2022 - Finished off most of convolve
+        Sept 28, 2022 - Compared results with signal.convolve2D
+        Sept 30, 2022 - Changes made to return only filtered image
 
         Function that implements convolution through correlation. Designed to work
         like signal.convolve2D from the scipy library. The kernel used for convolution
@@ -48,11 +48,12 @@ def im_correlate(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
         Image Correlation Filter
 
         Author: Sherwyn Braganza
-        Sept 28, 2020 - Initial Creation
-        Sept 28, 2020 - Added more descriptive comments.
-        Sept 28, 2020 - Finished off most of correlate
-        Sept 28, 2020 - Compared results with signal.correlate2D
-        Sept 30, 2020 - Changes made to return only filtered image
+        Sept 28, 2022 - Initial Creation
+        Sept 28, 2022 - Added more descriptive comments.
+        Sept 28, 2022 - Finished off most of correlate
+        Sept 28, 2022 - Compared results with signal.correlate2D
+        Sept 30, 2022 - Changes made to return only filtered image
+        Setp 30, 2022 - Increased compatibility with grayscales
 
         Function that implements correlation image processing. Designed to work
         like signal.correlate2D from the scipy library. The kernel used for correlation
@@ -75,12 +76,20 @@ def im_correlate(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     if kernel.shape[0] % 2 == 0 or kernel.shape[1] % 2 == 0:
         raise Exception('Kernel with even dimensions provided.')
 
+    # if grayscale or colored
+    color = True if len(image.shape) > 2 else False
+
     image = skimage.img_as_float32(image)  # convert to floats in [0,1] to make computations uniform
+
+    # if grayscale, create a third dimension with only one channel
+    if not color:
+        image = image.reshape(image.shape[0],image.shape[1],1)
 
     # Padding section
     pad_row, pad_col = kernel.shape[0] // 2, kernel.shape[1] // 2  # calculate pad_width for rows and cols
+    pad_params = ((pad_row, pad_row), (pad_col, pad_col), (0, 0))
     padded_img = np.pad(image,
-                        ((pad_row, pad_row), (pad_col, pad_col), (0, 0)),
+                        pad_params,
                         mode='constant',
                         constant_values=0)  # pad image along rows and cols but not channels (if it exists)
 
@@ -88,7 +97,7 @@ def im_correlate(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     filtered = np.zeros(image.shape)
 
     # Check if it is an rgb or grayscale img
-    channel = 3 if len(image.shape) > 2 else 1
+    channel = 3 if color else 1
 
     for i in range(pad_row, image.shape[0] + pad_row):
         for j in range(pad_col, image.shape[1] + pad_col):
@@ -98,12 +107,27 @@ def im_correlate(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
                     k] * kernel)  # convolution step
 
     # clip images and convert them back to ubytes before returning
-    return skimage.img_as_ubyte(filtered.clip(0, 1))
+
+    return skimage.img_as_ubyte(filtered.clip(0, 1)) if color \
+        else skimage.img_as_ubyte(filtered.clip(0, 1))[:, :, 0]
 
 
 def hybridise(image1: np.ndarray, image2: np.ndarray, sigma1: int, sigma2: int, fourier: bool):
     """
         Hybrid Image Generator
+        Generates a hybrid image according to the process described by Oliva, Torralba and Schyns
+        in Siggraph(2006) (http://olivalab.mit.edu/hybrid/Talk_Hybrid_Siggraph06.pdf).
+
+        The basis of this process is to take the high pass version of one image and
+        superimpose it on the low pass version of the other. These images have to be normalized
+        and centered for best results. This function implements the same process
+        using 2 approaches - Spatial Convolution and Fourier Domain Multiplication (Hadamard Product)
+
+        The function generates 2 different Gaussian Filters based on the sigmas provided and
+        uses them to get a low pass and high pass filtered images
+
+        The generated hybrid image is rescaled 4 times and stacked horizontally to get the
+        final image that is then returned.
 
         Author: Sherwyn Braganza
         29 Sept, 2022 - Implemented a rudimentary hybrid image generator
@@ -130,9 +154,9 @@ def hybridise(image1: np.ndarray, image2: np.ndarray, sigma1: int, sigma2: int, 
         lowpass_image2 = my_imfilter(image2, gaussian_high)
 
         hybrid = skimage.img_as_ubyte((
-                                              skimage.img_as_float32(lowpass_image) +
-                                              skimage.img_as_float32(image2) -
-                                              skimage.img_as_float32(lowpass_image2)
+                                      skimage.img_as_float32(lowpass_image) +
+                                      skimage.img_as_float32(image2) -
+                                      skimage.img_as_float32(lowpass_image2)
                                       ).clip(0, 1))
     #else:
         # TODO - Implement fourier based hybrid image generation
@@ -212,8 +236,12 @@ def generateGaussianKernel(sigma: float) -> np.ndarray:
 
 
 if __name__ == '__main__':
+
     img1 = io.imread('data/dog.bmp', as_gray=False)
-    img2 = io.imread('data/cat.bmp', as_gray=False)
+    img2 = skimage.img_as_ubyte(io.imread('data/marilyn.bmp', as_gray=True))
+    impulse = np.asarray([[0,0,0],
+                          [0,1,0],
+                          [0,0,0]])
     sobel = np.asarray([[-1, 0, 1],
                         [-2, 0, 2],
                         [-1, 0, 1]])
@@ -223,22 +251,33 @@ if __name__ == '__main__':
     emboss = np.array([[-2, -1, 0],
                        [-1, 1, 1],
                        [0, 1, 2]])
-    boxblur = (1 / 9.0) * np.array([[1, 1, 1],
-                                    [1, 1, 1],
-                                    [1, 1, 1]])
 
-    gaussian = generateGaussianKernel(0.5)
+    gaussian = generateGaussianKernel(0.75)
 
-    # img_sobel = my_imfilter(img1, sobel)
-    # img_sharpen = my_imfilter(img1, sharpen)
-    # img_emboss = my_imfilter(img1, emboss)
-    # img_boxblur = my_imfilter(img1, boxblur)
-    # img_gaussian = my_imfilter(img1, gaussian)
+    img_impulse = my_imfilter(img1, impulse)
+    img_sobel = my_imfilter(img1, sobel)
+    img_sharpen = my_imfilter(img1, sharpen)
+    img_emboss = my_imfilter(img1, emboss)
+    img_gaussian = my_imfilter(img1, gaussian)
 
-    # joined = np.hstack((img1, img_sobel, img_sharpen, img_emboss, img_boxblur, img_gaussian))
-    # plt.title('Original --> Sobel --> Sharpen --> Emboss --> Boxblur --> Gaussian')
-    # plt.imshow(joined)
-    # plt.show()
+    joined = np.hstack((img1, img_impulse, img_sobel, img_sharpen, img_emboss, img_gaussian))
+    plt.title('Original --> Impulse --> Sobel --> Sharpen --> Emboss -->Gaussian')
+    plt.imshow(joined)
+    skimage.io.imsave('my_filter_colored.jpg', joined)
+    plt.show()
 
-    new_image = hybridise(img1, img2, sigma1=7, sigma2=5, fourier=False)
-    plt.imsave('hybrid.jpg', new_image)
+    img_impulse = my_imfilter(img2, impulse)
+    img_sobel = my_imfilter(img2, sobel)
+    img_sharpen = my_imfilter(img2, sharpen)
+    img_emboss = my_imfilter(img2, emboss)
+    img_gaussian = my_imfilter(img2, gaussian)
+
+    joined = np.hstack((img2, img_impulse, img_sobel, img_sharpen, img_emboss, img_gaussian))
+    plt.title('Original --> Impulse --> Sobel --> Sharpen --> Emboss --> Gaussian')
+    plt.imshow(joined, cmap='gray')
+    skimage.io.imsave('my_filter_gray.jpg', joined)
+    plt.show()
+
+
+    # new_image = hybridise(img1, img2, sigma1=7, sigma2=5, fourier=False)
+    # plt.imsave('hybrid.jpg', new_image)
