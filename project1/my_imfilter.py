@@ -4,7 +4,7 @@ from skimage import io
 import matplotlib.pyplot as plt
 
 
-def my_imfilter(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
+def imConvolute(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     """
         Image Convolution Filter
 
@@ -38,12 +38,12 @@ def my_imfilter(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     kernel = np.flip(np.flip(kernel, axis=1), axis=0)
 
     # call correlation function and get the kernel correlated image as well as the impulse version of it
-    filtered = im_correlate(image, kernel)
+    filtered = imCorrelate(image, kernel)
 
     return filtered
 
 
-def im_correlate(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
+def imCorrelate(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     """
         Image Correlation Filter
 
@@ -83,7 +83,7 @@ def im_correlate(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
 
     # if grayscale, create a third dimension with only one channel
     if not color:
-        image = image.reshape(image.shape[0],image.shape[1],1)
+        image = image.reshape(image.shape[0], image.shape[1], 1)
 
     # Padding section
     pad_row, pad_col = kernel.shape[0] // 2, kernel.shape[1] // 2  # calculate pad_width for rows and cols
@@ -112,7 +112,7 @@ def im_correlate(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
         else skimage.img_as_ubyte(filtered.clip(0, 1))[:, :, 0]
 
 
-def hybridise(image1: np.ndarray, image2: np.ndarray, sigma1: int, sigma2: int, fourier: bool):
+def hybridise(image1: np.ndarray, image2: np.ndarray, sigma1: float, sigma2: float, fourier: bool):
     """
         Hybrid Image Generator
         Generates a hybrid image according to the process described by Oliva, Torralba and Schyns
@@ -148,20 +148,20 @@ def hybridise(image1: np.ndarray, image2: np.ndarray, sigma1: int, sigma2: int, 
     hybrid = np.asarray([])
     gaussian_low = generateGaussianKernel(sigma1)
     gaussian_high = generateGaussianKernel(sigma2)
+    lowpass_image = lowpass_image2 = None
 
     if not fourier:
-        lowpass_image = my_imfilter(image1, gaussian_low)
-        lowpass_image2 = my_imfilter(image2, gaussian_high)
+        lowpass_image = imConvolute(image1, gaussian_low)
+        lowpass_image2 = imConvolute(image2, gaussian_high)
+    else:
+        lowpass_image = fourierDomain(image1, gaussian_low)
+        lowpass_image2 = fourierDomain(image2, gaussian_high)
 
-        hybrid = skimage.img_as_ubyte((
-                                      skimage.img_as_float32(lowpass_image) +
-                                      skimage.img_as_float32(image2) -
-                                      skimage.img_as_float32(lowpass_image2)
-                                      ).clip(0, 1))
-    #else:
-        # TODO - Implement fourier based hybrid image generation
-
-
+    hybrid = skimage.img_as_ubyte((
+                                  skimage.img_as_float32(lowpass_image) +
+                                  skimage.img_as_float32(image2) -
+                                  skimage.img_as_float32(lowpass_image2)
+                                  ).clip(0, 1))
 
     #######################################
     # Image stacking and padding section
@@ -197,6 +197,26 @@ def hybridise(image1: np.ndarray, image2: np.ndarray, sigma1: int, sigma2: int, 
         )
 
     return np.hstack(image_stack)
+
+
+def fourierDomain(image, kernel):
+    color = True if len(image.shape) > 2 else False
+
+    pad_values = (image.shape[0] - kernel.shape[0]) // 2, (image.shape[1] - kernel.shape[1]) // 2
+    padded_kernel = np.zeros(image.shape[0:2])
+    padded_kernel[
+    pad_values[0]: pad_values[0] + kernel.shape[0],
+    pad_values[1]: pad_values[1] + kernel.shape[1]
+    ] = kernel
+
+    output_img = np.zeros(image.shape) if color else np.zeros((image.shape, 1))
+
+    for i in range(image.shape[2]):
+        Fc = np.fft.fft2(image[:, :, i])
+        Fk = np.fft.fft2(padded_kernel)
+        output_img[:, :, i] = np.real(np.fft.fftshift(np.fft.ifft2(Fc * Fk))) / 255
+
+    return skimage.img_as_ubyte(output_img) if color else skimage.img_as_ubyte(output_img)[:, :, 0]
 
 
 def generateGaussianKernel(sigma: float) -> np.ndarray:
@@ -236,9 +256,9 @@ def generateGaussianKernel(sigma: float) -> np.ndarray:
 
 
 if __name__ == '__main__':
-
     img1 = io.imread('data/dog.bmp', as_gray=False)
     img2 = skimage.img_as_ubyte(io.imread('data/marilyn.bmp', as_gray=True))
+
     impulse = np.asarray([[0,0,0],
                           [0,1,0],
                           [0,0,0]])
@@ -254,11 +274,11 @@ if __name__ == '__main__':
 
     gaussian = generateGaussianKernel(0.75)
 
-    img_impulse = my_imfilter(img1, impulse)
-    img_sobel = my_imfilter(img1, sobel)
-    img_sharpen = my_imfilter(img1, sharpen)
-    img_emboss = my_imfilter(img1, emboss)
-    img_gaussian = my_imfilter(img1, gaussian)
+    img_impulse = imConvolute(img1, impulse)
+    img_sobel = imConvolute(img1, sobel)
+    img_sharpen = imConvolute(img1, sharpen)
+    img_emboss = imConvolute(img1, emboss)
+    img_gaussian = imConvolute(img1, gaussian)
 
     joined = np.hstack((img1, img_impulse, img_sobel, img_sharpen, img_emboss, img_gaussian))
     plt.title('Original --> Impulse --> Sobel --> Sharpen --> Emboss -->Gaussian')
@@ -266,11 +286,11 @@ if __name__ == '__main__':
     skimage.io.imsave('my_filter_colored.jpg', joined)
     plt.show()
 
-    img_impulse = my_imfilter(img2, impulse)
-    img_sobel = my_imfilter(img2, sobel)
-    img_sharpen = my_imfilter(img2, sharpen)
-    img_emboss = my_imfilter(img2, emboss)
-    img_gaussian = my_imfilter(img2, gaussian)
+    img_impulse = imConvolute(img2, impulse)
+    img_sobel = imConvolute(img2, sobel)
+    img_sharpen = imConvolute(img2, sharpen)
+    img_emboss = imConvolute(img2, emboss)
+    img_gaussian = imConvolute(img2, gaussian)
 
     joined = np.hstack((img2, img_impulse, img_sobel, img_sharpen, img_emboss, img_gaussian))
     plt.title('Original --> Impulse --> Sobel --> Sharpen --> Emboss --> Gaussian')
@@ -278,6 +298,7 @@ if __name__ == '__main__':
     skimage.io.imsave('my_filter_gray.jpg', joined)
     plt.show()
 
-
-    # new_image = hybridise(img1, img2, sigma1=7, sigma2=5, fourier=False)
+    # img2 = io.imread('data/einstein.bmp', as_gray=False)
+    # img1 = io.imread('data/marilyn.bmp', as_gray=False)
+    # new_image = hybridise(img1, img2, sigma1=4, sigma2=1.75, fourier=True)
     # plt.imsave('hybrid.jpg', new_image)
