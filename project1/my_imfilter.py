@@ -32,11 +32,11 @@ def my_imfilter(image: np.ndarray, kernel: np.ndarray) -> (np.ndarray, np.ndarra
             @:return    impulse (np.matrix) : Impulse Convolved Version of the Image (using impulse kernel)
             @:return    filter (np.matrix)  : Kernel Convolved Version of the Image
     """
-    if kernel.shape[0]%2 == 0 or kernel.shape[1]%2 == 0:
+    if kernel.shape[0] % 2 == 0 or kernel.shape[1] % 2 == 0:
         raise Exception('Kernel with even dimensions provided.')
 
     # flip the kernel along rows and cols
-    kernel = np.flip(np.flip(kernel, axis=1),axis=0)
+    kernel = np.flip(np.flip(kernel, axis=1), axis=0)
 
     # call correlation function and get the kernel correlated image as well as the impulse version of it
     impulse, filtered = im_correlate(image, kernel)
@@ -76,17 +76,17 @@ def im_correlate(image: np.ndarray, kernel: np.ndarray) -> (np.ndarray, np.ndarr
             @:return    filter (np.matrix)  : Kernel Correlated Version of the Image
 
     """
-    if kernel.shape[0]%2 == 0 or kernel.shape[1]%2 == 0:
+    if kernel.shape[0] % 2 == 0 or kernel.shape[1] % 2 == 0:
         raise Exception('Kernel with even dimensions provided.')
 
-    image = skimage.img_as_float32(image) # convert to floats in [0,1] to make computations uniform
+    image = skimage.img_as_float32(image)  # convert to floats in [0,1] to make computations uniform
 
     # Padding section
-    pad_row, pad_col = kernel.shape[0]//2, kernel.shape[1]//2 # calculate pad_width for rows and cols
+    pad_row, pad_col = kernel.shape[0] // 2, kernel.shape[1] // 2  # calculate pad_width for rows and cols
     padded_img = np.pad(image,
-                        ((pad_row, pad_row), (pad_col,pad_col), (0,0)),
-                         mode='constant',
-                        constant_values=0) # pad image along rows and cols but not channels (if it exists)
+                        ((pad_row, pad_row), (pad_col, pad_col), (0, 0)),
+                        mode='constant',
+                        constant_values=0)  # pad image along rows and cols but not channels (if it exists)
 
     # create containers for the impulse and kernel filtered image
     impulse = np.zeros(image.shape)
@@ -100,56 +100,105 @@ def im_correlate(image: np.ndarray, kernel: np.ndarray) -> (np.ndarray, np.ndarr
     # Check if it is an rgb or grayscale img
     channel = 3 if len(image.shape) > 2 else 1
 
-    for i in range(pad_row, image.shape[0]+pad_row):
-        for j in range(pad_col, image.shape[1]+pad_col):
+    for i in range(pad_row, image.shape[0] + pad_row):
+        for j in range(pad_col, image.shape[1] + pad_col):
             for k in range(channel):
                 impulse[i - pad_row, j - pad_col, k] = np.sum(
-                    padded_img[i-pad_row:i+pad_row+1, j-pad_col:j+pad_col+1, k] * impulse_kernel)  # convolution step
+                    padded_img[i - pad_row:i + pad_row + 1, j - pad_col:j + pad_col + 1,
+                    k] * impulse_kernel)  # convolution step
                 filtered[i - pad_row, j - pad_col, k] = np.sum(
-                    padded_img[i-pad_row:i+pad_row+1, j-pad_col:j+pad_col+1, k] * kernel)  # convolution step
+                    padded_img[i - pad_row:i + pad_row + 1, j - pad_col:j + pad_col + 1,
+                    k] * kernel)  # convolution step
 
     # clip images and convert them back to ubytes before returning
-    return skimage.img_as_ubyte(impulse.clip(0,1)), skimage.img_as_ubyte(filtered.clip(0,1))
+    return skimage.img_as_ubyte(impulse.clip(0, 1)), skimage.img_as_ubyte(filtered.clip(0, 1))
 
-def hybridise(img1, img2):
-    N = 17
-    gaussian2_1D = (1 / N ** 2) * np.asarray(np.linspace(1, N, N) + np.linspace(N - 1, 1, N)).reshape(-1, 1)
-    gaussian2 = gaussian2_1D.T * gaussian2_1D
 
-    img_gaussian = my_imfilter(img1, gaussian2)[1]
-    img_gaussian_2 = my_imfilter(img2, gaussian2)[1]
-    hybrid = skimage.img_as_ubyte((skimage.img_as_float32(img_gaussian)
-                                   + skimage.img_as_float32(img2) - skimage.img_as_float32(img_gaussian_2)).clip(0, 1))
+def hybridise(image1: np.ndarray, image2: np.ndarray, fourier: bool):
+    hybrid = np.asarray([])
 
-    return hybrid
+    if not fourier:
+        sigma = 7
+        gaussian_low = generateGaussianKernel(sigma)
+        gaussian_high = generateGaussianKernel(sigma)
+
+        lowpass_image = my_imfilter(image1, gaussian_low)[1]
+        lowpass_image2 = my_imfilter(image2, gaussian_high)[1]
+
+        hybrid = skimage.img_as_ubyte((
+                                              skimage.img_as_float32(lowpass_image) +
+                                              skimage.img_as_float32(image2) -
+                                              skimage.img_as_float32(lowpass_image2)
+                                      ).clip(0, 1))
+
+    image_stack = []
+    image_stack.append(hybrid)
+
+    for i in range(0, 3):
+        image_stack.append(skimage.transform.rescale(image_stack[0], 0.5, anti_aliasing=True, multichannel=True))
+
+    # padding the rescaled images
+    for i in range(1, 4):
+        image_stack[i] = np.pad(
+            image_stack[i],
+            ((image_stack[0].shape[0] - image_stack[i].shape[0], 0),
+             (0, (image_stack[0].shape[1] - image_stack[i].shape[1])),
+             (0, 0)),
+            mode='constant',
+            constant_values=255
+        )
+
+    return np.hstack(image_stack)
+
+
+def generateGaussianKernel(sigma: float) -> np.ndarray:
+    size = int(8 * sigma + 1)
+    # need an odd sized kernel
+    if not size % 2:
+        size = size + 1
+
+    center = size // 2
+    kernel = np.zeros(size)
+
+    # Generate Gaussian blur.
+    for x in range(size):
+        diff = (x - center) ** 2
+        kernel[x] = np.exp(-diff / (2 * sigma ** 2))
+
+    kernel = np.asarray(kernel.reshape(-1, 1).T * kernel.reshape(-1, 1))
+    kernel = kernel / np.sum(kernel)
+
+    return kernel
 
 
 if __name__ == '__main__':
     img1 = io.imread('data/dog.bmp', as_gray=False)
     img2 = io.imread('data/cat.bmp', as_gray=False)
-    sobel = np.asarray([[-1,0,1],
-                         [-2,0,2],
-                         [-1,0,1]])
+    sobel = np.asarray([[-1, 0, 1],
+                        [-2, 0, 2],
+                        [-1, 0, 1]])
     sharpen = np.array([[0, -1, 0],
                         [-1, 5, -1],
                         [0, -1, 0]])
     emboss = np.array([[-2, -1, 0],
-                        [-1, 1, 1],
-                        [0, 1, 2]])
+                       [-1, 1, 1],
+                       [0, 1, 2]])
     boxblur = (1 / 9.0) * np.array([[1, 1, 1],
                                     [1, 1, 1],
                                     [1, 1, 1]])
 
-    gaussian_1D = (1/16)*np.asarray([1,2,2,6,2,2,1]).reshape(-1,1)
-    gaussian = gaussian_1D.T * gaussian_1D
+    gaussian = generateGaussianKernel(0.5)
 
-    img_sobel = my_imfilter(img1, sobel)[1]
-    img_sharpen = my_imfilter(img1, sharpen)[1]
-    img_emboss = my_imfilter(img1, emboss)[1]
-    img_boxblur = my_imfilter(img1, boxblur)[1]
-    img_gaussian = my_imfilter(img1, gaussian)[1]
+    # img_sobel = my_imfilter(img1, sobel)[1]
+    # img_sharpen = my_imfilter(img1, sharpen)[1]
+    # img_emboss = my_imfilter(img1, emboss)[1]
+    # img_boxblur = my_imfilter(img1, boxblur)[1]
+    # img_gaussian = my_imfilter(img1, gaussian)[1]
 
-    joined = np.hstack((img1, img_sobel, img_sharpen, img_emboss, img_boxblur, img_gaussian))
-    plt.title('Original --> Sobel --> Sharpen --> Emboss --> Boxblur --> Gaussian')
-    plt.imshow(joined)
-    plt.show()
+    # joined = np.hstack((img1, img_sobel, img_sharpen, img_emboss, img_boxblur, img_gaussian))
+    # plt.title('Original --> Sobel --> Sharpen --> Emboss --> Boxblur --> Gaussian')
+    # plt.imshow(joined)
+    # plt.show()
+
+    hybrid = hybridise(img1, img2, fourier=False)
+    plt.imshow('hybrid.jpg', hybrid)
