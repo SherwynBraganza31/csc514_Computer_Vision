@@ -3,6 +3,19 @@ import skimage
 from skimage import io
 import matplotlib.pyplot as plt
 
+IMPULSE = np.asarray([[0,0,0],
+                      [0,1,0],
+                      [0,0,0]])
+SOBEL = np.asarray([[-1, 0, 1],
+                    [-2, 0, 2],
+                    [-1, 0, 1]])
+SHARPEN = np.array([[0, -1, 0],
+                    [-1, 5, -1],
+                    [0, -1, 0]])
+EMBOSS = np.array([[-2, -1, 0],
+                   [-1, 1, 1],
+                   [0, 1, 2]])
+
 
 def imConvolute(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     """
@@ -23,7 +36,7 @@ def imConvolute(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
         It therefore flips the kernel and passes it to the function that gives the correlational
         version of an image with the flipped kernel.
 
-        The function returns an np.ndarray, corresponding to the image correlated with the kernel provided.
+        The function returns a np.ndarray, corresponding to the image correlated with the kernel provided.
 
             :param image: Numpy matrix containing image data
             :param kernel: Numpy matrix containing data for an
@@ -64,7 +77,7 @@ def imCorrelate(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
         according to the shape of the convolutional kernel. It finally clips the image pixel values to [0,1]
         before converting it back to ubyte format and returning it.
 
-        The function returns an np.ndarray, corresponding to the image correlated with the kernel provided.
+        The function returns a np.ndarray, corresponding to the image correlated with the kernel provided.
 
         TODO - Try to use logical indexing insted of loops
 
@@ -200,8 +213,20 @@ def hybridise(image1: np.ndarray, image2: np.ndarray, sigma1: float, sigma2: flo
 
 
 def fourierDomain(image, kernel):
+    """
+        Fourier Domain Image Convolution
+
+        Implements image convolution by shifting the image and kernel into the Frequency Domain, computing
+        the Hadamard Product of them both and then converting them back to the spacial domain using the
+        inverse fourier transform.
+
+        :param image: The image to be convolved
+        :param kernel: The kernel to be convolved
+        :return: The convolved image and kernel
+    """
     color = True if len(image.shape) > 2 else False
 
+    image = skimage.img_as_float32(image)
     pad_values = (image.shape[0] - kernel.shape[0]) // 2, (image.shape[1] - kernel.shape[1]) // 2
     padded_kernel = np.zeros(image.shape[0:2])
     padded_kernel[
@@ -214,7 +239,7 @@ def fourierDomain(image, kernel):
     for i in range(image.shape[2]):
         Fc = np.fft.fft2(image[:, :, i])
         Fk = np.fft.fft2(padded_kernel)
-        output_img[:, :, i] = np.real(np.fft.fftshift(np.fft.ifft2(Fc * Fk))) / 255
+        output_img[:, :, i] = np.real(np.fft.fftshift(np.fft.ifft2(Fc * Fk)))
 
     return skimage.img_as_ubyte(output_img) if color else skimage.img_as_ubyte(output_img)[:, :, 0]
 
@@ -234,7 +259,7 @@ def generateGaussianKernel(sigma: float) -> np.ndarray:
         the 1D Gaussian with itself to form a 2D square Gaussian kernel
 
         :param sigma: The standard deviation of the gaussian
-        :return: kernel: The 2D Gaussian kernel generated
+        :return: kernel: The 2D Gaussian kernel generated in float format
     """
     size = int(8 * sigma + 1)
     # enforce an odd sized kernel
@@ -255,48 +280,56 @@ def generateGaussianKernel(sigma: float) -> np.ndarray:
     return kernel
 
 
-if __name__ == '__main__':
+def testConvolutionColor():
+    """
+        Script to test out Colored Image Convolution
+
+        Author: Sherwyn Braganza
+
+        :param: NONE
+        :return: NONE
+    """
+
     img1 = io.imread('data/dog.bmp', as_gray=False)
-    img2 = skimage.img_as_ubyte(io.imread('data/marilyn.bmp', as_gray=True))
-
-    impulse = np.asarray([[0,0,0],
-                          [0,1,0],
-                          [0,0,0]])
-    sobel = np.asarray([[-1, 0, 1],
-                        [-2, 0, 2],
-                        [-1, 0, 1]])
-    sharpen = np.array([[0, -1, 0],
-                        [-1, 5, -1],
-                        [0, -1, 0]])
-    emboss = np.array([[-2, -1, 0],
-                       [-1, 1, 1],
-                       [0, 1, 2]])
-
-    gaussian = generateGaussianKernel(0.75)
-
-    img_impulse = imConvolute(img1, impulse)
-    img_sobel = imConvolute(img1, sobel)
-    img_sharpen = imConvolute(img1, sharpen)
-    img_emboss = imConvolute(img1, emboss)
-    img_gaussian = imConvolute(img1, gaussian)
+    GAUSSIAN = generateGaussianKernel(3)
+    img_impulse = imConvolute(img1, IMPULSE)
+    img_sobel = imConvolute(img1, SOBEL)
+    img_sharpen = imConvolute(img1, SHARPEN)
+    img_emboss = imConvolute(img1, EMBOSS)
+    img_gaussian = imConvolute(img1, GAUSSIAN)
 
     joined = np.hstack((img1, img_impulse, img_sobel, img_sharpen, img_emboss, img_gaussian))
     plt.title('Original --> Impulse --> Sobel --> Sharpen --> Emboss -->Gaussian')
-    plt.imshow(joined)
-    skimage.io.imsave('my_filter_colored.jpg', joined)
-    plt.show()
+    skimage.io.imsave('tests/my_filter_test_colored.jpg', joined)
 
-    img_impulse = imConvolute(img2, impulse)
-    img_sobel = imConvolute(img2, sobel)
-    img_sharpen = imConvolute(img2, sharpen)
-    img_emboss = imConvolute(img2, emboss)
-    img_gaussian = imConvolute(img2, gaussian)
 
-    joined = np.hstack((img2, img_impulse, img_sobel, img_sharpen, img_emboss, img_gaussian))
-    plt.title('Original --> Impulse --> Sobel --> Sharpen --> Emboss --> Gaussian')
-    plt.imshow(joined, cmap='gray')
-    skimage.io.imsave('my_filter_gray.jpg', joined)
-    plt.show()
+def testConvolutionGray():
+    """
+        Script to test out Colored Grayscale Convolution
+
+        Author: Sherwyn Braganza
+
+        :param: NONE
+        :return: NONE
+    """
+
+    img1 = skimage.img_as_ubyte(io.imread('data/marilyn.bmp', as_gray=True))
+    GAUSSIAN = generateGaussianKernel(3)
+    img_impulse = imConvolute(img1, IMPULSE)
+    img_sobel = imConvolute(img1, SOBEL)
+    img_sharpen = imConvolute(img1, SHARPEN)
+    img_emboss = imConvolute(img1, EMBOSS)
+    img_gaussian = imConvolute(img1, GAUSSIAN)
+
+    joined = np.hstack((img1, img_impulse, img_sobel, img_sharpen, img_emboss, img_gaussian))
+    plt.title('Original --> Impulse --> Sobel --> Sharpen --> Emboss -->Gaussian')
+    skimage.io.imsave('tests/my_filter_test_gray.jpg', joined)
+
+
+if __name__ == '__main__':
+
+    testConvolutionColor()
+    testConvolutionGray()
 
     # img2 = io.imread('data/einstein.bmp', as_gray=False)
     # img1 = io.imread('data/marilyn.bmp', as_gray=False)
