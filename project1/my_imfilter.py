@@ -334,20 +334,41 @@ def testConvolutionGray():
     skimage.io.imsave('tests/my_filter_test_gray.jpg', joined)
 
 
-def testFFT():
-    img1 = skimage.color.rgb2gray(io.imread('data/submarine.bmp', as_gray=False))
-    img_fft = np.fft.fftshift(np.fft.fft2(img1))
-    img_ifft = np.fft.ifft2(np.fft.ifftshift(img_fft))
-    plt.imshow(skimage.img_as_ubyte(np.real(img_fft).clip(-1,1)), cmap='gray')
-    plt.show()
-    plt.imshow(skimage.img_as_ubyte(np.real(img_ifft).clip(-1,1)), cmap='gray')
-    plt.show()
+def testFFT(image_name):
+    image = io.imread(image_name, as_gray=True)
+    fig, axs = plt.subplots(2,2)
+    fig.tight_layout(h_pad=2)
+    plt.subplots_adjust(top=0.9)
+    padded_gaussian = np.zeros(image.shape)
+    gaussian = generateGaussianKernel(4)
+    pad_params = (image.shape[0]-gaussian.shape[0])//2, (image.shape[1]-gaussian.shape[1])//2
+    padded_gaussian[pad_params[0]:pad_params[0]+gaussian.shape[0],
+                    pad_params[1]:pad_params[1]+gaussian.shape[1]] = gaussian
+
+    axs[0,0].imshow(image, cmap='gray')
+    axs[0,0].set_title('Original')
+
+    img_fft = np.fft.fft2(image)
+    axs[0,1].imshow(skimage.img_as_ubyte(np.real(np.fft.fftshift(img_fft)).clip(-1,1)), cmap='gray')
+    axs[0,1].set_title('Frequency Domain Spectra')
+
+    filtered_fft = img_fft * np.fft.fft2(padded_gaussian)
+    axs[1,0].imshow(skimage.img_as_ubyte(np.real(np.fft.fftshift(filtered_fft)).clip(-1,1)), cmap='gray')
+    axs[1,0].set_title('Low Pass Filtered Image')
+
+    reconstructed = np.real(np.fft.ifftshift(np.fft.ifft2(filtered_fft))).clip(-1,1)
+    axs[1,1].imshow(skimage.img_as_ubyte(reconstructed), cmap='gray')
+    axs[1,1].set_title('Reconstructed Filtered Image')
+
+    fig.savefig('tests/fft_transformed_'+image_name[5:-3]+'jpg')
+
 
 if __name__ == '__main__':
 
     #testConvolutionColor()
     #testConvolutionGray()
-    testFFT()
+    testFFT("data/submarine.bmp")
+    testFFT("data/plane.bmp")
 
     # img2 = io.imread('data/einstein.bmp', as_gray=False)
     # img1 = io.imread('data/marilyn.bmp', as_gray=False)
