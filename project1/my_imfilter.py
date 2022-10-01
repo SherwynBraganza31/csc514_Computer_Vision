@@ -247,7 +247,7 @@ def fourierDomain(image, kernel):
     for i in range(image.shape[2]):
         Fc = np.fft.fft2(image[:, :, i])
         Fk = np.fft.fft2(padded_kernel)
-        output_img[:, :, i] = np.real(np.fft.ifftshift(np.fft.ifft2(Fc * Fk)))
+        output_img[:, :, i] = np.abs(np.fft.ifftshift(np.fft.ifft2(Fc * Fk)))
 
     return skimage.img_as_ubyte(output_img) if color else skimage.img_as_ubyte(output_img)[:, :, 0]
 
@@ -340,7 +340,7 @@ def testFFT(image_name):
     fig.tight_layout(h_pad=2)
     plt.subplots_adjust(top=0.9)
     padded_gaussian = np.zeros(image.shape)
-    gaussian = generateGaussianKernel(4)
+    gaussian = generateGaussianKernel(3)
     pad_params = (image.shape[0]-gaussian.shape[0])//2, (image.shape[1]-gaussian.shape[1])//2
     padded_gaussian[pad_params[0]:pad_params[0]+gaussian.shape[0],
                     pad_params[1]:pad_params[1]+gaussian.shape[1]] = gaussian
@@ -348,12 +348,12 @@ def testFFT(image_name):
     axs[0,0].imshow(image, cmap='gray')
     axs[0,0].set_title('Original')
 
-    img_fft = np.fft.fft2(image)
-    axs[0,1].imshow(skimage.img_as_ubyte(np.real(np.fft.fftshift(img_fft)).clip(-1,1)), cmap='gray')
+    img_fft = np.fft.fft2(np.fft.ifftshift(image))
+    axs[0,1].imshow(skimage.img_as_ubyte(np.real(np.log10(np.fft.fftshift(img_fft))).clip(-1,1)), cmap='gray')
     axs[0,1].set_title('Frequency Domain Spectra')
 
-    filtered_fft = img_fft * np.fft.fft2(padded_gaussian)
-    axs[1,0].imshow(skimage.img_as_ubyte(np.real(np.fft.fftshift(filtered_fft)).clip(-1,1)), cmap='gray')
+    filtered_fft = img_fft * np.fft.fft2(np.fft.ifftshift(padded_gaussian))
+    axs[1,0].imshow(skimage.img_as_ubyte(np.real(np.log10(np.fft.fftshift(filtered_fft))).clip(-1,1)), cmap='gray')
     axs[1,0].set_title('Low Pass Filtered Image')
 
     reconstructed = np.real(np.fft.ifftshift(np.fft.ifft2(filtered_fft))).clip(-1,1)
