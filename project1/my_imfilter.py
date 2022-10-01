@@ -17,6 +17,14 @@ EMBOSS = np.array([[-2, -1, 0],
                    [0, 1, 2]])
 
 
+def my_imfilter(image: np.ndarray, kernel: np.ndarray) -> (np.ndarray, np.ndarray):
+    """
+        Wrapper Function for imConvolute. Created to meet assignment
+        document specifications
+    """
+    return imConvolute(image, IMPULSE), imConvolute(image, kernel)
+
+
 def imConvolute(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     """
         Image Convolution Filter
@@ -239,7 +247,7 @@ def fourierDomain(image, kernel):
     for i in range(image.shape[2]):
         Fc = np.fft.fft2(image[:, :, i])
         Fk = np.fft.fft2(padded_kernel)
-        output_img[:, :, i] = np.real(np.fft.fftshift(np.fft.ifft2(Fc * Fk)))
+        output_img[:, :, i] = np.real(np.fft.ifftshift(np.fft.ifft2(Fc * Fk)))
 
     return skimage.img_as_ubyte(output_img) if color else skimage.img_as_ubyte(output_img)[:, :, 0]
 
@@ -326,10 +334,20 @@ def testConvolutionGray():
     skimage.io.imsave('tests/my_filter_test_gray.jpg', joined)
 
 
+def testFFT():
+    img1 = skimage.color.rgb2gray(io.imread('data/submarine.bmp', as_gray=False))
+    img_fft = np.fft.fftshift(np.fft.fft2(img1))
+    img_ifft = np.fft.ifft2(np.fft.ifftshift(img_fft))
+    plt.imshow(skimage.img_as_ubyte(np.real(img_fft).clip(-1,1)), cmap='gray')
+    plt.show()
+    plt.imshow(skimage.img_as_ubyte(np.real(img_ifft).clip(-1,1)), cmap='gray')
+    plt.show()
+
 if __name__ == '__main__':
 
-    testConvolutionColor()
-    testConvolutionGray()
+    #testConvolutionColor()
+    #testConvolutionGray()
+    testFFT()
 
     # img2 = io.imread('data/einstein.bmp', as_gray=False)
     # img1 = io.imread('data/marilyn.bmp', as_gray=False)
