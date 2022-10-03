@@ -21,7 +21,6 @@ EMBOSS = np.array([[-2, -1, 0],
                    [0, 1, 2]])
 
 
-
 def my_imfilter(image: np.ndarray, kernel: np.ndarray) -> (np.ndarray, np.ndarray):
     """
         Wrapper Function for imConvolute. Created to meet assignment
@@ -265,7 +264,7 @@ def fourierDomain(image, kernel):
     for i in range(image.shape[2]):
         Fc = np.fft.fft2(np.fft.ifftshift(image[:, :, i]))
         Fk = np.fft.fft2(np.fft.ifftshift(padded_kernel))
-        output_img[:, :, i] = np.abs(np.fft.ifftshift(np.fft.ifft2(Fc * Fk)))
+        output_img[:, :, i] = np.abs(np.fft.ifftshift(np.fft.ifft2(Fc * Fk))).clip(-1,1)
 
     return skimage.img_as_ubyte(output_img) if color else skimage.img_as_ubyte(output_img)[:, :, 0]
 
@@ -368,7 +367,7 @@ def testFFT(image_name):
         :return: None
     """
     image = io.imread(image_name, as_gray=True)
-    fig, axs = plt.subplots(2,2)
+    fig, axs = plt.subplots(3,2)
     fig.tight_layout(h_pad=2)
     plt.subplots_adjust(top=0.9)
     padded_gaussian = np.zeros(image.shape)
@@ -388,11 +387,21 @@ def testFFT(image_name):
     axs[1,0].imshow(skimage.img_as_ubyte(np.real(np.log10(np.fft.fftshift(filtered_fft))).clip(-1,1)), cmap='gray')
     axs[1,0].set_title('Low Pass Filtered Image')
 
-    reconstructed = np.real(np.fft.ifftshift(np.fft.ifft2(filtered_fft))).clip(-1,1)
-    axs[1,1].imshow(skimage.img_as_ubyte(reconstructed), cmap='gray')
-    axs[1,1].set_title('Reconstructed Filtered Image')
+    filtered_fft_high = img_fft - filtered_fft
+    axs[2, 0].imshow(skimage.img_as_ubyte(np.real(np.log10(
+        np.fft.fftshift(filtered_fft_high))).clip(-1,1)), cmap='gray')
+    axs[2, 0].set_title('High Pass Filtered Image')
+
+    reconstructed_lowpass = np.real(np.fft.ifftshift(np.fft.ifft2(filtered_fft))).clip(-1,1)
+    axs[1,1].imshow(skimage.img_as_ubyte(reconstructed_lowpass), cmap='gray')
+    axs[1,1].set_title('Reconstructed Low-pass Image')
+
+    reconstructed_highpass = np.real(np.fft.ifftshift(np.fft.ifft2(filtered_fft_high))).clip(-1, 1)
+    axs[2, 1].imshow(skimage.img_as_ubyte(reconstructed_highpass), cmap='gray')
+    axs[2, 1].set_title('Reconstructed High-pass Image')
 
     fig.savefig('tests/fft_transformed_'+image_name[5:-3]+'jpg')
+
 
 def testUnevenKernel():
     # Uneven Kernel Test
