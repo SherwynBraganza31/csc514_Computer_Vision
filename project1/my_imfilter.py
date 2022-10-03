@@ -21,7 +21,6 @@ EMBOSS = np.array([[-2, -1, 0],
                    [0, 1, 2]])
 
 
-
 def my_imfilter(image: np.ndarray, kernel: np.ndarray) -> (np.ndarray, np.ndarray):
     """
         Wrapper Function for imConvolute. Created to meet assignment
@@ -265,7 +264,7 @@ def fourierDomain(image, kernel):
     for i in range(image.shape[2]):
         Fc = np.fft.fft2(np.fft.ifftshift(image[:, :, i]))
         Fk = np.fft.fft2(np.fft.ifftshift(padded_kernel))
-        output_img[:, :, i] = np.abs(np.fft.ifftshift(np.fft.ifft2(Fc * Fk)))
+        output_img[:, :, i] = np.abs(np.fft.ifftshift(np.fft.ifft2(Fc * Fk))).clip(-1,1)
 
     return skimage.img_as_ubyte(output_img) if color else skimage.img_as_ubyte(output_img)[:, :, 0]
 
@@ -393,6 +392,7 @@ def testFFT(image_name):
     axs[1,1].set_title('Reconstructed Filtered Image')
 
     fig.savefig('tests/fft_transformed_'+image_name[5:-3]+'jpg')
+
 
 def testUnevenKernel():
     # Uneven Kernel Test
