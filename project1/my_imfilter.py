@@ -10,12 +10,16 @@ IMPULSE = np.asarray([[0,0,0],
 SOBEL = np.asarray([[-1, 0, 1],
                     [-2, 0, 2],
                     [-1, 0, 1]])
+UNEVEN_SOBEL = np.asarray([[-2, -1, 0, 1,2],
+                    [-4, -2, 0, 2, 4],
+                    [-2, -1, 0, 1, 2]])
 SHARPEN = np.array([[0, -1, 0],
                     [-1, 5, -1],
                     [0, -1, 0]])
 EMBOSS = np.array([[-2, -1, 0],
                    [-1, 1, 1],
                    [0, 1, 2]])
+
 
 
 def my_imfilter(image: np.ndarray, kernel: np.ndarray) -> (np.ndarray, np.ndarray):
@@ -390,6 +394,15 @@ def testFFT(image_name):
 
     fig.savefig('tests/fft_transformed_'+image_name[5:-3]+'jpg')
 
+def testUnevenKernel():
+    # Uneven Kernel Test
+    img1 = skimage.img_as_ubyte(io.imread('data/marilyn.bmp', as_gray=True))
+    convolved = imConvolute(img1, UNEVEN_SOBEL)
+    fig, axs = plt.subplots()
+    axs.set_title('Uneven Kernel')
+    axs.imshow(convolved, cmap='gray')
+    fig.savefig('tests/unevenkernel.jpg')
+
 
 if __name__ == '__main__':
     # check if directories exist
@@ -402,8 +415,6 @@ if __name__ == '__main__':
     testConvolutionGray()
     testFFT("data/submarine.bmp")
     testFFT("data/plane.bmp")
+    testUnevenKernel()
 
-    # img2 = io.imread('data/cat.bmp', as_gray=False)
-    # img1 = io.imread('data/dog.bmp', as_gray=False)
-    # new_image = hybridise(img1, img2, sigma1=7, sigma2=3, fourier=True)
-    # io.imsave('hybrid.jpg', new_image)
+
