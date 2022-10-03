@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import skimage
 from skimage import io
@@ -136,6 +137,7 @@ def imCorrelate(image: np.ndarray, kernel: np.ndarray) -> np.ndarray:
 def hybridise(image1: np.ndarray, image2: np.ndarray, sigma1: float, sigma2: float, fourier: bool):
     """
         Hybrid Image Generator
+
         Generates a hybrid image according to the process described by Oliva, Torralba and Schyns
         in Siggraph(2006) (http://olivalab.mit.edu/hybrid/Talk_Hybrid_Siggraph06.pdf).
 
@@ -171,6 +173,7 @@ def hybridise(image1: np.ndarray, image2: np.ndarray, sigma1: float, sigma2: flo
     gaussian_high = generateGaussianKernel(sigma2)
     lowpass_image = lowpass_image2 = None
 
+
     if not fourier:
         lowpass_image = imConvolute(image1, gaussian_low)
         lowpass_image2 = imConvolute(image2, gaussian_high)
@@ -183,6 +186,10 @@ def hybridise(image1: np.ndarray, image2: np.ndarray, sigma1: float, sigma2: flo
                                   skimage.img_as_float32(image2) -
                                   skimage.img_as_float32(lowpass_image2)
                                   ).clip(0, 1))
+
+    # if grayscale, create a third dimension with only one channel
+    if len(hybrid.shape) < 3:
+        hybrid = hybrid.reshape(hybrid.shape[0], hybrid.shape[1], 1)
 
     #######################################
     # Image stacking and padding section
@@ -217,12 +224,14 @@ def hybridise(image1: np.ndarray, image2: np.ndarray, sigma1: float, sigma2: flo
             constant_values=255
         )
 
-    return np.hstack(image_stack)
+    return np.hstack(image_stack) if len(image1.shape) > 2 else np.hstack(image_stack)[:,:,0]
 
 
 def fourierDomain(image, kernel):
     """
         Fourier Domain Image Convolution
+
+        Author: Sherywn Braganza
 
         Implements image convolution by shifting the image and kernel into the Frequency Domain, computing
         the Hadamard Product of them both and then converting them back to the spacial domain using the
@@ -232,21 +241,26 @@ def fourierDomain(image, kernel):
         :param kernel: The kernel to be convolved
         :return: The convolved image and kernel
     """
+    if kernel.shape[0] % 2 == 0 or kernel.shape[1] % 2 == 0:
+        raise Exception('Kernel with even dimensions provided.')
+
     color = True if len(image.shape) > 2 else False
+
+    # if grayscale, create a third dimension with only one channel
+    if not color:
+        image = image.reshape(image.shape[0], image.shape[1], 1)
 
     image = skimage.img_as_float32(image)
     pad_values = (image.shape[0] - kernel.shape[0]) // 2, (image.shape[1] - kernel.shape[1]) // 2
     padded_kernel = np.zeros(image.shape[0:2])
-    padded_kernel[
-    pad_values[0]: pad_values[0] + kernel.shape[0],
-    pad_values[1]: pad_values[1] + kernel.shape[1]
-    ] = kernel
+    padded_kernel[pad_values[0]: pad_values[0] + kernel.shape[0], pad_values[1]: pad_values[1] + kernel.shape[1]
+                    ] = kernel
 
-    output_img = np.zeros(image.shape) if color else np.zeros((image.shape, 1))
+    output_img = np.zeros(image.shape)
 
     for i in range(image.shape[2]):
-        Fc = np.fft.fft2(image[:, :, i])
-        Fk = np.fft.fft2(padded_kernel)
+        Fc = np.fft.fft2(np.fft.ifftshift(image[:, :, i]))
+        Fk = np.fft.fft2(np.fft.ifftshift(padded_kernel))
         output_img[:, :, i] = np.abs(np.fft.ifftshift(np.fft.ifft2(Fc * Fk)))
 
     return skimage.img_as_ubyte(output_img) if color else skimage.img_as_ubyte(output_img)[:, :, 0]
@@ -307,8 +321,10 @@ def testConvolutionColor():
     img_gaussian = imConvolute(img1, GAUSSIAN)
 
     joined = np.hstack((img1, img_impulse, img_sobel, img_sharpen, img_emboss, img_gaussian))
-    plt.title('Original --> Impulse --> Sobel --> Sharpen --> Emboss -->Gaussian')
-    skimage.io.imsave('tests/my_filter_test_colored.jpg', joined)
+    fig, axs = plt.subplots()
+    axs.set_title('Original --> Impulse --> Sobel --> Sharpen --> Emboss -->Gaussian')
+    axs.imshow(joined)
+    fig.savefig('tests/my_filter_test_colored.jpg')
 
 
 def testConvolutionGray():
@@ -330,11 +346,23 @@ def testConvolutionGray():
     img_gaussian = imConvolute(img1, GAUSSIAN)
 
     joined = np.hstack((img1, img_impulse, img_sobel, img_sharpen, img_emboss, img_gaussian))
-    plt.title('Original --> Impulse --> Sobel --> Sharpen --> Emboss -->Gaussian')
-    skimage.io.imsave('tests/my_filter_test_gray.jpg', joined)
+    fig, axs = plt.subplots()
+    axs.set_title('Original --> Impulse --> Sobel --> Sharpen --> Emboss -->Gaussian')
+    axs.imshow(joined, cmap='gray')
+    fig.savefig('tests/my_filter_test_gray.jpg')
 
 
 def testFFT(image_name):
+    """
+        Test image processing in the Fourier Space
+
+        Coverts the image to its fourier space representation, applies a gaussian
+        filter to it and then converts it back to the spatial domain. Saves images
+        at each of these steps.
+
+        :param image_name: Name of the image to test
+        :return: None
+    """
     image = io.imread(image_name, as_gray=True)
     fig, axs = plt.subplots(2,2)
     fig.tight_layout(h_pad=2)
@@ -364,13 +392,18 @@ def testFFT(image_name):
 
 
 if __name__ == '__main__':
+    # check if directories exist
+    if not os.path.exists('data'):
+        os.makedirs('data')
+    if not os.path.exists('tests'):
+        os.makedirs('tests')
 
-    #testConvolutionColor()
-    #testConvolutionGray()
+    testConvolutionColor()
+    testConvolutionGray()
     testFFT("data/submarine.bmp")
     testFFT("data/plane.bmp")
 
-    # img2 = io.imread('data/einstein.bmp', as_gray=False)
-    # img1 = io.imread('data/marilyn.bmp', as_gray=False)
-    # new_image = hybridise(img1, img2, sigma1=4, sigma2=1.75, fourier=True)
-    # plt.imsave('hybrid.jpg', new_image)
+    # img2 = io.imread('data/cat.bmp', as_gray=False)
+    # img1 = io.imread('data/dog.bmp', as_gray=False)
+    # new_image = hybridise(img1, img2, sigma1=7, sigma2=3, fourier=True)
+    # io.imsave('hybrid.jpg', new_image)
