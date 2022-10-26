@@ -27,14 +27,15 @@ def generateGaussian(sigma, size) -> np.ndarray:
 
     return kernel
 
+def rotateMatrix()
+
 class FeatureDetection:
 
-    def __init__(self, image: np.ndarray = None, features=None, response=None, match_image=None):
+    def __init__(self, image: np.ndarray = None, features=None, response=None):
         self.image = image
         self.grayscale = image_handler.convertToGrayscale(image)
         self.features = features
         self.response = response
-        self.match_image = match_image
  
     def getFeatures(self):
         """
@@ -65,7 +66,7 @@ class FeatureDetection:
                 if row < bounds[0] or row > (image.shape[0] - bounds[0]) \
                         or col < bounds[1] or col > (image.shape[1] - bounds[1]):
                     continue
-                if y > 90:
+                if y > 30:
                     self.features.append([(row, col), self.getOrientation(I_X, I_Y, (row, col))])
 
         self.nonMaximalSuppression((-2,2))
@@ -130,7 +131,7 @@ class FeatureDetection:
                     np.max(
                         self.response[feature[0][0] + suppression_window[0]: feature[0][0] + suppression_window[1]+1,
                         feature[0][1] + suppression_window[0]: feature[0][1] + suppression_window[1]+1]
-                    ):
+                    ) and feature:
                 del self.features[idx]
                 count += 1
             else:
@@ -138,7 +139,7 @@ class FeatureDetection:
 
         print('{} features suppressed'.format(count))
 
-    def showFeatures(self, loc: tuple[int, int], scale: float = 1, orientation: float = 0) -> None:
+    def showFeatures(self, loc: tuple, scale: float = 1, orientation: float = 0) -> None:
         """
             Shows (overlays) the features detected on the image. Plots them in the form of boxes with
             orientation.
@@ -156,7 +157,7 @@ class FeatureDetection:
         for x in plotpoints:
             self.image[x[0], x[1], :] = np.asarray([255, 0, 0])
 
-    def constructBufferSquare(self, loc: tuple[int,int], scale: float) -> np.ndarray:
+    def constructBufferSquare(self, loc: tuple, scale: float) -> np.ndarray:
         """
             Gets 4 points around loc that corresponds to the edges of the
             buffer square. The points are listed in the bottomLeft, bottomRight,
@@ -174,7 +175,7 @@ class FeatureDetection:
 
         return np.vstack((bottomLeft,bottomRight,topRight,topLeft, bottomTopRightCenter))
 
-    def rotateBufferSquare(self, loc: tuple[int, int], points: np.ndarray, orientation: float) -> np.ndarray:
+    def rotateBufferSquare(self, loc: tuple, points: np.ndarray, orientation: float) -> np.ndarray:
         """
             Rotate the buffer square according to the orientation given.
 
@@ -196,7 +197,7 @@ class FeatureDetection:
 
         return np.rint(cob_points + loc).astype(int, casting='unsafe')
 
-    def generatePlotPoints(self, loc: tuple[int, int], points: np.ndarray, scale) -> np.ndarray:
+    def generatePlotPoints(self, loc: tuple, points: np.ndarray, scale) -> np.ndarray:
         """
             Interpolate between extremities and get points along the edges of the buffer
             square for plotting
@@ -224,6 +225,22 @@ class FeatureDetection:
         ))
 
         return np.delete(plotpoints, 0, axis=0)
+
+class FeatureMatching:
+
+    def __init__(self, featureImage1: FeatureDetection, featureImage2: FeatureDetection):
+        self.featureImage1 = featureImage1
+        self.featureImage2 = featureImage2
+        self.combinedImage = np.hstack((featureImage1, featureImage2))
+        self.shift_amount = featureImage1.image.shape
+
+    def rotate
+    def grabGradientChunk(self, location, scale, orientation):
+
+
+    def getMatches(self):
+        for x in self.featureImage1.features:
+            x =
 
 
 if __name__ == '__main__':
