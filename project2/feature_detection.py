@@ -1,13 +1,142 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import skimage.io
-
 import image_handler
+from scipy import signal
+
+def generateGaussian(sigma, size) -> np.ndarray:
+    """
+        Generates a Gaussian using std_dev sigma of size (size x size)
+        :param sigma: The standard deviation
+        :param size: The size or shape of the Guassian
+        :return: np.ndarray: The guassian that is generated
+    """
+    # enforce an odd sized kernel
+    if not size % 2:
+        raise Exception('Even Guassian size given')
+
+    center = size // 2
+    kernel = np.zeros(size)
+
+    # Generate Gaussian blur.
+    for x in range(size):
+        diff = (x - center) ** 2
+        kernel[x] = np.exp(-diff / (2 * sigma ** 2))
+
+    kernel = np.asarray(kernel.reshape(-1, 1).T * kernel.reshape(-1, 1))
+    kernel = kernel / np.sum(kernel)
+
+    return kernel
 
 class FeatureDetection:
-    def __init__(self, image:np.ndarray = None):
+
+    def __init__(self, image: np.ndarray = None, features=None, response=None, match_image=None):
         self.image = image
+        self.grayscale = image_handler.convertToGrayscale(image)
+        self.features = features
+        self.response = response
+        self.match_image = match_image
+ 
+    def getFeatures(self):
+        """
+            Implements a corner strength detection method to identify interest points.
+            The performs non-Maximal Suppresion on the identified points to remove
+            duplicates of features really close to each other.
+
+            Author Sherwyn Braganza
+
+            :return: None
+        """
+        SOBEL_X = np.asarray([[-1,-1, 0, 1, 1],
+                      [-2,-1, 0, 1, 2],
+                      [-4, -2, 0, 2, 4],
+                      [-2, -1, 0, 1, 2],
+                      [-1,-1, 0, 1, 1]])
+        SOBEL_Y = SOBEL_X.T
+        I_X = signal.convolve2d(self.grayscale, SOBEL_X, mode='same')
+        I_Y = signal.convolve2d(self.grayscale, SOBEL_Y, mode='same')
+
+        # Pick a feature Detection Method
+        self.computeHarrisStephens(I_X, I_Y)
+
         self.features = []
+        bounds = int(10 / 100 * image.shape[0]), int(10 / 100 * image.shape[1])
+        for row, x in enumerate(self.response):
+            for col, y in enumerate(x):
+                if row < bounds[0] or row > (image.shape[0] - bounds[0]) \
+                        or col < bounds[1] or col > (image.shape[1] - bounds[1]):
+                    continue
+                if y > 90:
+                    self.features.append([(row, col), self.getOrientation(I_X, I_Y, (row, col))])
+
+        self.nonMaximalSuppression((-2,2))
+
+    def getOrientation(self, I_X, I_Y, loc):
+        """
+            Calculates the orientaion of the gradient at point loc.
+            Does this by taking the tan^(-1) of the ratio of gradient
+            in the Y direction to the gradient in the X.
+
+            Author: Sherwyn Braganza
+
+            :param I_X: The gradient in the X direction
+            :param I_Y: The gradient in the Y direction
+            :param loc: The point at which the orientation should be found
+            :return: The angle in degrees.
+        """
+        return np.degrees(np.arctan2(I_Y[loc],I_X[loc]))
+
+    def computeHarrisStephens(self, I_X, I_Y):
+        """
+            Computes the corner strength based on the Harris-Stephens
+            Algorithm.
+
+            Author: Sherwyn Braganza
+
+            :param I_X: The derivative of the image in the X direction
+            :param I_Y: The derivative of the image in the Y direction
+            :return: The corner strength response
+        """
+        w_1d = np.asarray([1, 4, 7, 4, 1]).reshape(-1, 1)
+        w_2d = np.matmul(w_1d, w_1d.T)
+        w = w_2d / np.sum(w_2d)
+        I_XX = signal.convolve2d(I_X ** 2, w, mode='same')
+        I_YY = signal.convolve2d(I_Y ** 2, w, mode='same')
+        I_XY = signal.convolve2d(I_X * I_Y, w, mode='same')
+        alpha = 0.04
+
+        # determinant
+        det = I_XX * I_YY - I_XY * I_XY
+        # trace
+        trace = I_XX + I_YY
+
+        self.response = det - alpha * (trace ** 2)
+
+    def nonMaximalSuppression(self, suppression_window) -> None:
+        """
+            Implements non maximal suppression in a specified window size (suppression_window).
+            Manipulates the feature array internally and deletes points that are supposed to
+            be suppressed.
+
+            Author: Sherwyn Braganza
+
+            :param suppression_window: The window size
+            :return: None
+        """
+        count = 0
+        idx = 0
+        while idx < len(self.features):
+            feature = self.features[idx]
+            if self.response[feature[0][0], feature[0][1]] < \
+                    np.max(
+                        self.response[feature[0][0] + suppression_window[0]: feature[0][0] + suppression_window[1]+1,
+                        feature[0][1] + suppression_window[0]: feature[0][1] + suppression_window[1]+1]
+                    ):
+                del self.features[idx]
+                count += 1
+            else:
+                idx += 1
+
+        print('{} features suppressed'.format(count))
 
     def showFeatures(self, loc: tuple[int, int], scale: float = 1, orientation: float = 0) -> None:
         """
@@ -19,7 +148,7 @@ class FeatureDetection:
             :param orientation: The orientation of the feature.
             :return: None
         """
-        orientation += 90
+        # orientation += 90
         buffer = self.constructBufferSquare(loc, scale)
         rotated_buffer = self.rotateBufferSquare(loc, buffer, orientation)
         plotpoints = self.generatePlotPoints(loc, rotated_buffer, scale)
@@ -48,10 +177,13 @@ class FeatureDetection:
     def rotateBufferSquare(self, loc: tuple[int, int], points: np.ndarray, orientation: float) -> np.ndarray:
         """
             Rotate the buffer square according to the orientation given.
-            :param loc:
+
+            Author: Sherwyn Braganza
+
+            :param loc: The center of the feature
             :param points: The extremities of the buffer square
-            :param orientation:
-            :return:
+            :param orientation: The dominant orientation of the feature
+            :return: The new rotated buffer square's endpoints
         """
         loc = np.asarray(loc)
         cob_points = points - loc
@@ -69,10 +201,12 @@ class FeatureDetection:
             Interpolate between extremities and get points along the edges of the buffer
             square for plotting
 
-            :param loc:
-            :param points:
-            :param scale:
-            :return:
+            Author: Sherwyn Braganza
+
+            :param loc: The center of the feature
+            :param points: The endpoints of edges of the feature
+            :param scale: The span of the feature
+            :return: Points along the edges of the feature buffer
         """
         plotpoints = np.asarray([0, 0])
 
@@ -105,10 +239,32 @@ if __name__ == '__main__':
     # plt.plot(points[:,0], points[:,1])
     # plt.show()
 
-    ########## Feature Plotter Test ###############
+    # ########## Feature Plotter Test ###############
+    # image = image_handler.readImage('datasets/Yosemite/Yosemite1.jpg')
+    # features = FeatureDetection(image)
+    # features.showFeatures((88, 96), 20, 45)
+    # features.showFeatures((250, 450), 20, -36)
+    # skimage.io.imshow(image)
+    # skimage.io.show()
+
     image = image_handler.readImage('datasets/Yosemite/Yosemite1.jpg')
-    features = FeatureDetection(image)
-    features.showFeatures((88, 96), 20, 45)
-    features.showFeatures((250, 450), 20, -36)
-    skimage.io.imshow(image)
+    image2 = image_handler.readImage('datasets/Yosemite/Yosemite2.jpg')
+    image1_features = FeatureDetection(image, match_image=image2)
+    image2_features = FeatureDetection(image2)
+    image1_features.getFeatures()
+    image2_features.getFeatures()
+    for x in image1_features.features:
+        image1_features.showFeatures(x[0], 5, x[1])
+    for x in image2_features.features:
+        image2_features.showFeatures(x[0], 5, x[1])
+    skimage.io.imshow(np.hstack((image, image2)))
     skimage.io.show()
+
+    # image = image_handler.readImage('datasets/box.jpg')
+    # image1_features = FeatureDetection(image)
+    # for x in image1_features.features:
+    #     image1_features.showFeatures(x[0], 10, x[1])
+    # skimage.io.imshow(image)
+    # skimage.io.show()
+
+
