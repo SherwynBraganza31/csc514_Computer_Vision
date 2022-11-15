@@ -29,7 +29,7 @@ def loadImage(dir_name: str) -> List[np.ndarray]:
         print('Directory name doesn\'t exist')
 
 
-def grabUsrClicks(image1: np.ndarray, image2: np.ndarray) -> Tuple[List[Tuple[int, int]], List[Tuple[int, int]]]:
+def grabUsrClicks(image1: np.ndarray, image2: np.ndarray) -> (np.ndarray, np.ndarray):
     """
         Horizontally concatenates both the images and plots them in a clickable window and gets user
         input when the user clicks inside the window.
@@ -48,18 +48,25 @@ def grabUsrClicks(image1: np.ndarray, image2: np.ndarray) -> Tuple[List[Tuple[in
     """
     joined_image = np.hstack((image1, image2))
     plt.imshow(joined_image)
-    click_locs = plt.ginput(-1, timeout=90, show_clicks=True)
+    click_locs = plt.ginput(-1, timeout=30, show_clicks=True)
     image1_clicks, image2_clicks = [], []
 
     for x in click_locs:
         shape = image1.shape
         if x[0] >= shape[1]:
             # image2_clicks.append((shape[0] - x[1], x[0]%shape[1]))
-            image2_clicks.append((x[0] % shape[1], x[1]))
+            image2_clicks.append([x[0] % shape[1], x[1]])
         else:
             # image1_clicks.append((shape[0] - x[1], x[0]%shape[1]))
-            image1_clicks.append((x[0] % shape[1], x[1]))
+            image1_clicks.append([x[0] % shape[1], x[1]])
 
+    image1_clicks = np.asarray(image1_clicks)
+    image2_clicks = np.asarray(image2_clicks)
     plt.close()
+
     return image1_clicks, image2_clicks
 
+
+if __name__ == '__main__':
+    images = loadImage('P2_Benchmarks/DP_3')
+    img1_clicks, img2_clicks = grabUsrClicks(images[2], images[3])
