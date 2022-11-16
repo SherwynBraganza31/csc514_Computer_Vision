@@ -1,6 +1,7 @@
 from image_aligner import *
 from image_feature_handler import *
 
+
 class Tests:
     """
         Tests Class
@@ -152,10 +153,33 @@ class Tests:
 
         return
 
+    def siftTest(self):
+        images = loadImage(self.dir_name)
+        image1_features, image2_features = getFeatures(images[0], images[1])
+        # self.testHomography(images[0], image1_features, image2_features)
+        image1 = forwardWarp(images[0], images[1], image1_features, image2_features)
+        plt.imshow(image1)
+        plt.show()
+
+    def quadPanoramaTest(self):
+        self.dir_name = 'P2_Benchmarks/quad'
+        images = loadImage(self.dir_name)
+        image1 = images[0]
+
+        for idx in range(1, len(images)-10):
+            image2 = images[idx]
+            image1_features, image2_features = getFeatures(image1, image2)
+            image1 = forwardWarp(image1, image2, image1_features, image2_features)
+
+        plt.imshow(image1)
+        plt.show()
+
 
 if __name__ == '__main__':
     tests = Tests()
     # tests.testUsrClicks()
     # tests.testPresetFeatures()
     # tests.testForwardWarp()
-    tests.testInverseWarp()
+    # tests.testInverseWarp()
+    # tests.siftTest()
+    tests.quadPanoramaTest()

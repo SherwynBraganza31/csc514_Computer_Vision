@@ -93,17 +93,37 @@ def inverseWarp(image1, image2, image1_features, image2_features):
     pad_params = ((top_pad, bottom_pad), (left_pad, right_pad), (0, 0))
     image1 = np.pad(image1, pad_params, mode='constant', constant_values=0)
 
-    for x in range(bound_min[0], bound_max[0]):
-        for y in range(bound_min[1], bound_max[1]):
-            projection = computeProjection(h_matrix,
-                                           np.asarray([x, y, 1]).reshape(3, 1))
-            rounded_proj = projection.round(decimals=0).astype('int32')
-            trunc_proj = projection.astype('int32')
+    pad_params2 = ((top_pad, 2*bottom_pad), (left_pad, 3*left_pad), (0, 0))
+    image2 = np.pad(image2, pad_params2, mode='constant', constant_values=0)
 
-            if 1 <= projection[0] < x_bound - 1 and 1 <= projection[1] < y_bound - 1:
-                # pix_val = interpPixels(image2, trunc_proj[0], trunc_proj[1])
-                pix_val = image2[rounded_proj[0], rounded_proj[1], :]
-                image1[x + top_pad, y + left_pad, :] = np.mean(pix_val, axis=0)
+    x = np.arange(bound_min[0], bound_max[0], 1)
+    y = np.arange(bound_min[1], bound_max[1], 1)
+    x, y = np.meshgrid(x, y)
+
+    x, y = x.reshape(1, -1), y.reshape(1, -1)
+    ones = np.ones((1, x.shape[1]))
+    point_matrix = np.vstack((x, y, ones))
+
+    projections = computeProjection(h_matrix, point_matrix)
+    xx = (projections[0, :].round(decimals=0).astype('int32')) + top_pad
+    yy = (projections[1, :].round(decimals=0).astype('int32')) + left_pad
+
+    x = x + top_pad
+    y = y + left_pad
+
+    image1[x, y, :] = image2[xx, yy, :]
+
+    # for x in range(bound_min[0], bound_max[0]):
+    #     for y in range(bound_min[1], bound_max[1]):
+    #         projection = computeProjection(h_matrix,
+    #                                        np.asarray([x, y, 1]).reshape(3, 1))
+    #         rounded_proj = projection.round(decimals=0).astype('int32')
+    #         trunc_proj = projection.astype('int32')
+    #
+    #         if 1 <= projection[0] < x_bound - 1 and 1 <= projection[1] < y_bound - 1:
+    #             # pix_val = interpPixels(image2, trunc_proj[0], trunc_proj[1])
+    #             pix_val = image2[rounded_proj[0], rounded_proj[1], :]
+    #             image1[x + top_pad, y + left_pad, :] = np.mean(pix_val, axis=0)
 
     return image1
 
@@ -144,11 +164,27 @@ def forwardWarp(image1, image2, image1_features, image2_features) -> np.ndarray:
     pad_params = ((top_pad, bottom_pad), (left_pad, right_pad), (0,0))
     image1 = np.pad(image1, pad_params, mode='constant', constant_values=0)
 
-    for x in range(image2.shape[0]):
-        for y in range(image2.shape[1]):
-            projection = computeProjection(h_matrix,
-                                           np.asarray([x, y, 1]).reshape(3, 1)).round(decimals=0).astype('int32')
-            image1[projection[0] + top_pad, projection[1] + left_pad, :] = image2[x, y, :]
+    # Using advanced Indexing
+    x = np.arange(0, image2.shape[0], 1)
+    y = np.arange(0, image2.shape[1], 1)
+    x, y = np.meshgrid(x, y)
+
+    x, y = x.reshape(1, -1), y.reshape(1, -1)
+    ones = np.ones((1, x.shape[1]))
+    point_matrix = np.vstack((x, y, ones))
+
+    projections = computeProjection(h_matrix, point_matrix)
+    xx = (projections[0, :].round(decimals=0).astype('int32') + top_pad)
+    yy = (projections[1, :].round(decimals=0).astype('int32') + left_pad)
+
+    image1[xx, yy, :] = image2[x, y, :]
+
+    # Regular slow indexing
+    # for x in range(image2.shape[0]):
+    #     for y in range(image2.shape[1]):
+    #         projection = computeProjection(h_matrix,
+    #                                        np.asarray([x, y, 1]).reshape(3, 1)).round(decimals=0).astype('int32')
+    #         image1[projection[0] + top_pad, projection[1] + left_pad, :] = image2[x, y, :]
 
     return image1
 

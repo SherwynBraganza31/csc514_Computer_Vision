@@ -2,7 +2,8 @@ import os
 import skimage
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import List, Tuple
+from typing import List
+import cv2
 
 
 def loadImage(dir_name: str) -> List[np.ndarray]:
@@ -66,6 +67,25 @@ def grabUsrClicks(image1: np.ndarray, image2: np.ndarray) -> (np.ndarray, np.nda
 
     return image1_clicks, image2_clicks
 
+
+def getFeatures(image1: np.ndarray, image2: np.ndarray):
+    sift = cv2.xfeatures2d.SIFT_create()
+    image1 = cv2.cvtColor(skimage.img_as_ubyte(image1), cv2.COLOR_BGR2GRAY)
+    image2 = cv2.cvtColor(skimage.img_as_ubyte(image2), cv2.COLOR_BGR2GRAY)
+    features1, image1_descriptors = sift.detectAndCompute(image1, None)
+    features2, image2_descriptors = sift.detectAndCompute(image2, None)
+
+    bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
+    matches = bf.match(image1_descriptors, image2_descriptors)
+    matches = list(sorted(matches, key=lambda x: x.distance))[0:30]
+
+    image1_features, image2_features = [], []
+
+    for match in matches:
+        image1_features.append(list(features1[match.queryIdx].pt)[-1::-1])
+        image2_features.append(list(features2[match.trainIdx].pt)[-1::-1])
+
+    return np.asarray(image1_features), np.asarray(image2_features)
 
 if __name__ == '__main__':
     images = loadImage('P2_Benchmarks/DP_3')
