@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.interpolate
 from matplotlib import pyplot as plt
 from image_feature_handler import loadImage, grabUsrClicks
 import cv2
@@ -54,51 +55,73 @@ def computeProjection(h_matrix: np.ndarray, p_source: np.ndarray) -> np.ndarray:
 
 
 def inverseWarp(image1, image2, image1_features, image2_features):
+    """
+        Performs an inverse warp of image2 to the plane of image1.
+        Computes the edge projections of image2 on the plane of image1
+        and pads image1 accordingly.
+        Then performs an inverse warp using interpolation
+
+        Author: Sherwyn Braganza
+
+        :param image1: The image that acts as the base plane
+        :param image2: The image that is warped to the base plane
+        :param image1_features: features in image1
+        :param image2_features: features in image2
+        :return: The warped image
+    """
     h_matrix = computeHomography(image1_features, image2_features)
-    h_inv = np.linalg.inv(h_matrix)
-    rows, cols = image2.shape[0], image2.shape[1]
+    h_inv = computeHomography(image2_features, image1_features)
 
-    # The extremities of image 2 in the image 2 plane
+    x_bound, y_bound = image2.shape[0], image2.shape[1]  # get size of the second image
+
+    # Get positional values for the extremities of image2 in the image2 plane
     edge_pts = np.asarray([[0, 0, 1],  # TopLeft
-                [0, cols, 1],  # TopRight
-                [rows, cols, 1],  # BottomRight
-                [rows, 0, 1]]).T    # Bottom Left
+                           [0, y_bound, 1],  # TopRight
+                           [x_bound, y_bound, 1],  # BottomRight
+                           [x_bound, 0, 1]]).T  # Bottom Left
 
-    edge_projection = np.matmul(h_inv, edge_pts)
-    edge_projection = (edge_projection/edge_projection[-1, :])
-    edge_projection = np.round(edge_projection, decimals=0).astype('int32')
+    edge_projection = computeProjection(h_inv, edge_pts).round(decimals=0).astype('int32')
 
-    min_x = -min(edge_projection[0, :]) if min(edge_projection[0, :]) < 0 else 0
-    max_x = max(edge_projection[0, :]) - image1.shape[0] if max(edge_projection[0, :]) > image1.shape[0] else 0
-    min_y = -min(edge_projection[1, :]) if min(edge_projection[1, :]) < 0 else 0
-    max_y = max(edge_projection[1, :]) - image1.shape[1] if max(edge_projection[1, :]) > image1.shape[1] else 0
-    pad_params = ((min_x, max_x), (min_y, max_y), (0, 0))
+    bound_min = np.min(edge_projection, axis=1)[0:2]
+    bound_max = np.max(edge_projection, axis=1)[0:2]
+
+    # compute pad parameters and pad the image
+    left_pad = -bound_min[1] if bound_min[1] < 0 else 0
+    right_pad = bound_max[1] - y_bound if bound_max[1] > y_bound else 0
+    top_pad = -bound_min[0] if bound_min[0] < 0 else 0
+    bottom_pad = bound_max[0] - x_bound if bound_max[0] > x_bound else 0
+    pad_params = ((top_pad, bottom_pad), (left_pad, right_pad), (0, 0))
     image1 = np.pad(image1, pad_params, mode='constant', constant_values=0)
 
-    x_span = np.linspace(min(edge_projection[0, :]), max(edge_projection[0, :]),
-                         num=max(edge_projection[0, :]) - min(edge_projection[0, :]), dtype='int32',
-                         endpoint=False)
-    y_span = np.linspace(min(edge_projection[1, :]), max(edge_projection[1, :]),
-                         num=max(edge_projection[1, :]) - min(edge_projection[1, :]), dtype='int32',
-                         endpoint=False)
+    for x in range(bound_min[0], bound_max[0]):
+        for y in range(bound_min[1], bound_max[1]):
+            projection = computeProjection(h_matrix,
+                                           np.asarray([x, y, 1]).reshape(3, 1))
+            rounded_proj = projection.round(decimals=0).astype('int32')
+            trunc_proj = projection.astype('int32')
 
-    for x in x_span:
-        for y in y_span:
-            temp_p = np.matmul(h_matrix, np.asarray([x, y, 1]).reshape(3,1))
-            temp_p = temp_p/temp_p[-1]
-            try:
-                value = image2[int(temp_p[0]), int(temp_p[1]), :]
-                image1[x + min_x, y + min_y, :] = value
-            except IndexError:
-                value = 0
+            if 1 <= projection[0] < x_bound - 1 and 1 <= projection[1] < y_bound - 1:
+                # pix_val = interpPixels(image2, trunc_proj[0], trunc_proj[1])
+                pix_val = image2[rounded_proj[0], rounded_proj[1], :]
+                image1[x + top_pad, y + left_pad, :] = np.mean(pix_val, axis=0)
 
-    plt.imshow(image1)
-    plt.show()
-
-    return
+    return image1
 
 
-def forwardWarp(image1, image2, image1_features, image2_features) -> None:
+def forwardWarp(image1, image2, image1_features, image2_features) -> np.ndarray:
+    """
+        Melds two images together by performing a forward warp from image2 to image1.
+        Computes the edge projections of image2 on the plane of image1
+        and pads image1 accordingly.
+
+        Author: Sherwyn Braganza
+
+        :param image1: The image that acts as the base plane
+        :param image2: The image that is warped to the base plane
+        :param image1_features: features in image1
+        :param image2_features: features in image2
+        :return: The warped image
+    """
     h_matrix = computeHomography(image2_features, image1_features)
     x_bound, y_bound = image2.shape[0], image2.shape[1]  # get size of the second image
 
@@ -112,6 +135,8 @@ def forwardWarp(image1, image2, image1_features, image2_features) -> None:
 
     bound_min = np.min(edge_projection, axis=1)[0:2]
     bound_max = np.max(edge_projection, axis=1)[0:2]
+
+    # compute pad parameters and pad the image
     left_pad = -bound_min[1] if bound_min[1] < 0 else 0
     right_pad = bound_max[1] - y_bound if bound_max[1] > y_bound else 0
     top_pad = -bound_min[0] if bound_min[0] < 0 else 0
@@ -125,10 +150,23 @@ def forwardWarp(image1, image2, image1_features, image2_features) -> None:
                                            np.asarray([x, y, 1]).reshape(3, 1)).round(decimals=0).astype('int32')
             image1[projection[0] + top_pad, projection[1] + left_pad, :] = image2[x, y, :]
 
-    plt.imshow(image1)
-    plt.show()
+    return image1
 
 
+def interpPixels(image, x, y):
+    """
+        Interpolates the pixels
+        :param image:
+        :param x:
+        :param y:
+        :return:
+    """
+    proj_x, proj_y = np.arange(x - 1, x + 2, 1), np.arange(y - 1, y + 2, 1)
+    xx, yy = np.meshgrid(x, y)
+    values = image[xx, yy, :]
+    # gaussian = [0.25, 0.5, 0.25]
+
+    return np.mean(values, axis=0)
 
 
 
