@@ -1,8 +1,7 @@
 import numpy as np
-import scipy.interpolate
-from matplotlib import pyplot as plt
-from image_feature_handler import loadImage, grabUsrClicks
 import cv2
+import skimage.transform
+
 
 def computeHomography(image1_features: np.ndarray, image2_features: np.ndarray) -> np.ndarray:
     """
@@ -32,9 +31,9 @@ def computeHomography(image1_features: np.ndarray, image2_features: np.ndarray) 
 
     U, S, V = np.linalg.svd(point_matrix)
     # print(np.sum(V[-1] ** 2))
-    # h_matrix, status = cv2.findHomography(image1_features, image2_features)
+    h_matrix, status = cv2.findHomography(image1_features, image2_features, cv2.RANSAC, 5.0)
 
-    h_matrix = V[-1].reshape(3,3)
+    # h_matrix = V[-1].reshape(3,3)
     return h_matrix
 
 
@@ -72,6 +71,7 @@ def inverseWarp(image1, image2, image1_features, image2_features):
     h_matrix = computeHomography(image1_features, image2_features)
     h_inv = computeHomography(image2_features, image1_features)
 
+    ################# Image1 Padding based on projections of image2 ############################
     x_bound, y_bound = image2.shape[0], image2.shape[1]  # get size of the second image
 
     # Get positional values for the extremities of image2 in the image2 plane
@@ -87,32 +87,49 @@ def inverseWarp(image1, image2, image1_features, image2_features):
 
     # compute pad parameters and pad the image
     left_pad = -bound_min[1] if bound_min[1] < 0 else 0
-    right_pad = bound_max[1] - y_bound if bound_max[1] > y_bound else 0
+    right_pad = bound_max[1] - image1.shape[1] + 1 if bound_max[1] > image1.shape[1]  else 0
     top_pad = -bound_min[0] if bound_min[0] < 0 else 0
-    bottom_pad = bound_max[0] - x_bound if bound_max[0] > x_bound else 0
+    bottom_pad = bound_max[0] - image1.shape[0] + 1 if bound_max[0] > image1.shape[0] else 0
     pad_params = ((top_pad, bottom_pad), (left_pad, right_pad), (0, 0))
     image1 = np.pad(image1, pad_params, mode='constant', constant_values=0)
+    reshape_params = top_pad, image2.shape
+    #############################################################################################
 
-    pad_params2 = ((top_pad, 2*bottom_pad), (left_pad, 3*left_pad), (0, 0))
-    image2 = np.pad(image2, pad_params2, mode='constant', constant_values=0)
-
+    #################### Advanced Indexing ###########################
     x = np.arange(bound_min[0], bound_max[0], 1)
     y = np.arange(bound_min[1], bound_max[1], 1)
     x, y = np.meshgrid(x, y)
+    orig_shape = x.shape
 
     x, y = x.reshape(1, -1), y.reshape(1, -1)
     ones = np.ones((1, x.shape[1]))
     point_matrix = np.vstack((x, y, ones))
 
-    projections = computeProjection(h_matrix, point_matrix)
-    xx = (projections[0, :].round(decimals=0).astype('int32')) + top_pad
-    yy = (projections[1, :].round(decimals=0).astype('int32')) + left_pad
-
+    projections = computeProjection(h_matrix, point_matrix).round(decimals=0).astype('int32')
+    x, y = x.reshape(orig_shape), y.reshape(orig_shape)
+    xx, yy = projections[0, :], projections[1, :]
+    xx, yy = xx.reshape(orig_shape), yy.reshape(orig_shape)
     x = x + top_pad
     y = y + left_pad
 
-    image1[x, y, :] = image2[xx, yy, :]
+    #################### Padding image2 #############################
+    bound_min = xx.min(), yy.min()
+    bound_max = xx.max(), yy.max()
 
+    # compute pad parameters and pad the image
+    left_pad = -bound_min[1] if bound_min[1] < 0 else 0
+    right_pad = bound_max[1] - image2.shape[1] + 1 if bound_max[1] > image2.shape[1] else 0
+    top_pad = -bound_min[0] if bound_min[0] < 0 else 0
+    bottom_pad = bound_max[0] - image2.shape[0] + 1 if bound_max[0] > image2.shape[0] else 0
+    pad_params = ((top_pad, bottom_pad), (left_pad, right_pad), (0, 0))
+    image2 = np.pad(image2, pad_params, mode='constant', constant_values=0)
+
+    xx, yy = xx + top_pad, yy + left_pad
+    value = image2[xx, yy, :]
+    image1[x, y, :] = value
+    image1 = image1[reshape_params[0]: reshape_params[0] + reshape_params[1][0], :]
+
+    ############### Regular slow indexing ###################
     # for x in range(bound_min[0], bound_max[0]):
     #     for y in range(bound_min[1], bound_max[1]):
     #         projection = computeProjection(h_matrix,
@@ -124,7 +141,6 @@ def inverseWarp(image1, image2, image1_features, image2_features):
     #             # pix_val = interpPixels(image2, trunc_proj[0], trunc_proj[1])
     #             pix_val = image2[rounded_proj[0], rounded_proj[1], :]
     #             image1[x + top_pad, y + left_pad, :] = np.mean(pix_val, axis=0)
-
     return image1
 
 
@@ -143,28 +159,8 @@ def forwardWarp(image1, image2, image1_features, image2_features) -> np.ndarray:
         :return: The warped image
     """
     h_matrix = computeHomography(image2_features, image1_features)
-    x_bound, y_bound = image2.shape[0], image2.shape[1]  # get size of the second image
 
-    # Get positional values for the extremities of image2 in the image2 plane
-    edge_pts = np.asarray([[0, 0, 1],  # TopLeft
-                [0, y_bound, 1],  # TopRight
-                [x_bound, y_bound, 1],  # BottomRight
-                [x_bound, 0, 1]]).T    # Bottom Left
-
-    edge_projection = computeProjection(h_matrix, edge_pts).round(decimals=0).astype('int32')
-
-    bound_min = np.min(edge_projection, axis=1)[0:2]
-    bound_max = np.max(edge_projection, axis=1)[0:2]
-
-    # compute pad parameters and pad the image
-    left_pad = -bound_min[1] if bound_min[1] < 0 else 0
-    right_pad = bound_max[1] - y_bound if bound_max[1] > y_bound else 0
-    top_pad = -bound_min[0] if bound_min[0] < 0 else 0
-    bottom_pad = bound_max[0] - x_bound if bound_max[0] > x_bound else 0
-    pad_params = ((top_pad, bottom_pad), (left_pad, right_pad), (0,0))
-    image1 = np.pad(image1, pad_params, mode='constant', constant_values=0)
-
-    # Using advanced Indexing
+    #################### Advanced Indexing ###########################
     x = np.arange(0, image2.shape[0], 1)
     y = np.arange(0, image2.shape[1], 1)
     x, y = np.meshgrid(x, y)
@@ -174,17 +170,38 @@ def forwardWarp(image1, image2, image1_features, image2_features) -> np.ndarray:
     point_matrix = np.vstack((x, y, ones))
 
     projections = computeProjection(h_matrix, point_matrix)
-    xx = (projections[0, :].round(decimals=0).astype('int32') + top_pad)
-    yy = (projections[1, :].round(decimals=0).astype('int32') + left_pad)
+    xx, yy = projections[0].round(decimals=0).astype('int32'), projections[1].round(decimals=0).astype('int32')
+    x = x.reshape(image2.shape[1], image2.shape[0])
+    y = y.reshape(image2.shape[1], image2.shape[0])
+    xx = xx.reshape(x.shape)
+    yy = yy.reshape(x.shape)
+
+    ################# Image1 Padding based on projections of image2 ############################
+    bound_min = xx.min(), yy.min()
+    bound_max = xx.max(), yy.max()
+
+    # compute pad parameters and pad the image
+    left_pad = -bound_min[1] if bound_min[1] < 0 else 0
+    right_pad = bound_max[1] - image1.shape[1] + 1 if bound_max[1] > image1.shape[1] else 0
+    top_pad = -bound_min[0] if bound_min[0] < 0 else 0
+    bottom_pad = bound_max[0] - image1.shape[0] + 1 if bound_max[0] > image1.shape[0] else 0
+    pad_params = ((top_pad, bottom_pad), (left_pad, right_pad), (0, 0))
+    image1 = np.pad(image1, pad_params, mode='constant', constant_values=0)
+
+    xx = (xx + top_pad).reshape(x.shape)
+    yy = (yy + left_pad).reshape(y.shape)
 
     image1[xx, yy, :] = image2[x, y, :]
+    image1 = image1[top_pad: top_pad + image2.shape[0], :]
 
-    # Regular slow indexing
+
+    ############### Regular slow indexing ###################
     # for x in range(image2.shape[0]):
     #     for y in range(image2.shape[1]):
     #         projection = computeProjection(h_matrix,
     #                                        np.asarray([x, y, 1]).reshape(3, 1)).round(decimals=0).astype('int32')
-    #         image1[projection[0] + top_pad, projection[1] + left_pad, :] = image2[x, y, :]
+    #         if 0 <= projection[0] + top_pad < image1.shape[0] and 0 <= projection[1] + top_pad < image1.shape[1]:
+    #             image1[projection[0] + top_pad, projection[1] + left_pad, :] = image2[x, y, :]
 
     return image1
 

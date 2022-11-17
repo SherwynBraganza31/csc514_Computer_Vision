@@ -156,24 +156,33 @@ class Tests:
     def siftTest(self):
         images = loadImage(self.dir_name)
         image1_features, image2_features = getFeatures(images[0], images[1])
-        # self.testHomography(images[0], image1_features, image2_features)
         image1 = forwardWarp(images[0], images[1], image1_features, image2_features)
         plt.imshow(image1)
         plt.show()
 
-    def quadPanoramaTest(self):
-        self.dir_name = 'P2_Benchmarks/quad'
+    def panoramaTest(self):
+        self.dir_name = 'P2_Benchmarks/test'
         images = loadImage(self.dir_name)
-        image1 = images[0]
+        mid = int(len(images)/2)
+        image1 = images[mid]
 
-        for idx in range(1, len(images)-10):
+        for idx in range(mid-1, 0,gi -1):
+            print('Merging main image and {}'.format(idx))
             image2 = images[idx]
             image1_features, image2_features = getFeatures(image1, image2)
-            image1 = forwardWarp(image1, image2, image1_features, image2_features)
+            image1 = inverseWarp(image1, image2, image1_features, image2_features)
+            plt.imshow(image1)
+
+        plt.show()
+
+        for idx in range(mid+1, len(images)-1):
+            print('Merging main image and {}'.format(idx))
+            image2 = images[idx]
+            image1_features, image2_features = getFeatures(image1, image2)
+            image1 = inverseWarp(image1, image2, image1_features, image2_features)
 
         plt.imshow(image1)
         plt.show()
-
 
 if __name__ == '__main__':
     tests = Tests()
@@ -182,4 +191,4 @@ if __name__ == '__main__':
     # tests.testForwardWarp()
     # tests.testInverseWarp()
     # tests.siftTest()
-    tests.quadPanoramaTest()
+    tests.panoramaTest()

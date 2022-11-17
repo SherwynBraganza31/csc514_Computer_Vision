@@ -17,10 +17,10 @@ def loadImage(dir_name: str) -> List[np.ndarray]:
         :return: list of loaded images
     """
     image_array = []
-
     if os.path.exists(dir_name):
         os.chdir(dir_name)
         image_names = os.listdir()
+        image_names.sort()
         for x in image_names:
             # check if the file listed is an image file, if it is, load else not.
             if '.jpg' in x.lower():
@@ -69,6 +69,15 @@ def grabUsrClicks(image1: np.ndarray, image2: np.ndarray) -> (np.ndarray, np.nda
 
 
 def getFeatures(image1: np.ndarray, image2: np.ndarray):
+    """
+        Performs SIFT on the two images to get corresponding features.
+        Sorts the found features based on distance and then returns the
+        top 30 feature pairs.
+
+        :param image1: First image
+        :param image2: Second image
+        :return: Two-Tuple of coordinates of corresponding features
+    """
     sift = cv2.xfeatures2d.SIFT_create()
     image1 = cv2.cvtColor(skimage.img_as_ubyte(image1), cv2.COLOR_BGR2GRAY)
     image2 = cv2.cvtColor(skimage.img_as_ubyte(image2), cv2.COLOR_BGR2GRAY)
@@ -86,7 +95,3 @@ def getFeatures(image1: np.ndarray, image2: np.ndarray):
         image2_features.append(list(features2[match.trainIdx].pt)[-1::-1])
 
     return np.asarray(image1_features), np.asarray(image2_features)
-
-if __name__ == '__main__':
-    images = loadImage('P2_Benchmarks/DP_3')
-    img1_clicks, img2_clicks = grabUsrClicks(images[2], images[3])
