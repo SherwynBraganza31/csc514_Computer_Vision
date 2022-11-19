@@ -1,7 +1,6 @@
 import numpy as np
 import cv2
-import skimage.transform
-
+import matplotlib.pyplot as plt
 
 def computeHomography(image1_features: np.ndarray, image2_features: np.ndarray) -> np.ndarray:
     """
@@ -31,10 +30,65 @@ def computeHomography(image1_features: np.ndarray, image2_features: np.ndarray) 
 
     U, S, V = np.linalg.svd(point_matrix)
     # print(np.sum(V[-1] ** 2))
-    h_matrix, status = cv2.findHomography(image1_features, image2_features, cv2.RANSAC, 5.0)
 
-    # h_matrix = V[-1].reshape(3,3)
+    h_matrix = V[-1].reshape(3,3)
     return h_matrix
+
+
+def testHomography(image1: np.ndarray, image1_features: np.ndarray,
+                   image2_features: np.ndarray, plot=False, h_matrix=None):
+    """
+        Tests the homography or h-matrix by plotting the original feature points from image1
+        and the projection of the feature points in image2, on image1.
+        Also prints out the mean squared error
+
+        Author: Sherwyn Braganza
+
+        :param image1: the first image on which the points are to be plotted
+        :param image1_features: feature points of the first image
+        :param image2_features: feature points of the second image
+        :param plot: Whether to plot the result or just return the MSE
+        :param h_matrix: optional variable if the user wants to provide the homography
+        :return None
+    """
+    # get the homography matrix of projecting points from image2 to image1
+    if h_matrix is None:
+        h_matrix = computeHomography(image2_features, image1_features)
+
+    source_pts = np.vstack((image2_features.T, np.ones(image2_features.shape[0])))
+    projections = computeProjection(h_matrix, source_pts)
+    squared_errors = np.sum((image1_features.T - projections[0:2,:]) ** 2, axis=0)
+
+    if plot:
+        fig, ax = plt.subplots()
+        ax.imshow(image1)
+        for i in range(0, len(image1_features)):
+            ax.scatter(image1_features[i][1], image1_features[i][0], marker='^', c='red')
+            ax.scatter(projections[1, i], projections[0, i], marker='x', c='green')
+        plt.show()
+
+        print('MSE = {}'.format(np.mean(squared_errors)))
+
+    return np.mean(squared_errors)
+
+
+def ransac(image1_features: np.ndarray, image2_features: np.ndarray, max_ite=100) -> np.ndarray:
+    best_homography = None
+    best_mse = 10000
+    iterations = 0
+
+    while iterations < max_ite:
+        random_idx = np.random.permutation(len(image1_features))[0:4]
+        homography = computeHomography(image1_features[random_idx], image2_features[random_idx])
+        mse = testHomography(np.zeros((10, 10)), image1_features, image2_features, h_matrix=homography)
+        if mse < best_mse:
+            best_homography = homography
+            best_mse = mse
+
+    if best_homography is None or best_mse > 10:
+        return computeHomography(image1_features, image2_features)
+    else:
+        return best_homography
 
 
 def computeProjection(h_matrix: np.ndarray, p_source: np.ndarray) -> np.ndarray:
@@ -53,7 +107,7 @@ def computeProjection(h_matrix: np.ndarray, p_source: np.ndarray) -> np.ndarray:
     return pt_projection
 
 
-def inverseWarp(image1, image2, image1_features, image2_features):
+def inverseWarp(image1, image2, image1_features, image2_features) -> np.ndarray:
     """
         Performs an inverse warp of image2 to the plane of image1.
         Computes the edge projections of image2 on the plane of image1
@@ -68,11 +122,15 @@ def inverseWarp(image1, image2, image1_features, image2_features):
         :param image2_features: features in image2
         :return: The warped image
     """
-    h_matrix = computeHomography(image1_features, image2_features)
-    h_inv = computeHomography(image2_features, image1_features)
+    # h_matrix = ransac(image1_features, image2_features)
+    # h_inv = ransac(image2_features, image1_features)
+
+    h_matrix, status = cv2.findHomography(image1_features, image2_features, cv2.RANSAC, 5.0)
+    h_inv, status = cv2.findHomography(image2_features, image1_features, cv2.RANSAC, 5.0)
 
     ################# Image1 Padding based on projections of image2 ############################
-    x_bound, y_bound = image2.shape[0], image2.shape[1]  # get size of the second image
+    x_bound, y_bound = image2.shape[0], image2.shape[1] # get size of the second image
+    original_shape = image1.shape
 
     # Get positional values for the extremities of image2 in the image2 plane
     edge_pts = np.asarray([[0, 0, 1],  # TopLeft
@@ -96,8 +154,12 @@ def inverseWarp(image1, image2, image1_features, image2_features):
     #############################################################################################
 
     #################### Advanced Indexing ###########################
-    x = np.arange(bound_min[0], bound_max[0], 1)
-    y = np.arange(bound_min[1], bound_max[1], 1)
+    x_start = original_shape[0] if bound_min[0] > 0 else bound_min[0]
+    x_end = 0 if bound_max[0] < original_shape[0] else bound_max[0]
+    y_start = original_shape[1] if bound_min[1] > 0 else bound_min[1]
+    y_end = 0 if bound_max[1] < original_shape[1] else bound_max[1]
+    x = np.arange(x_start, x_end, 1)
+    y = np.arange(y_start, y_end, 1)
     x, y = np.meshgrid(x, y)
     orig_shape = x.shape
 
@@ -129,18 +191,6 @@ def inverseWarp(image1, image2, image1_features, image2_features):
     image1[x, y, :] = value
     image1 = image1[reshape_params[0]: reshape_params[0] + reshape_params[1][0], :]
 
-    ############### Regular slow indexing ###################
-    # for x in range(bound_min[0], bound_max[0]):
-    #     for y in range(bound_min[1], bound_max[1]):
-    #         projection = computeProjection(h_matrix,
-    #                                        np.asarray([x, y, 1]).reshape(3, 1))
-    #         rounded_proj = projection.round(decimals=0).astype('int32')
-    #         trunc_proj = projection.astype('int32')
-    #
-    #         if 1 <= projection[0] < x_bound - 1 and 1 <= projection[1] < y_bound - 1:
-    #             # pix_val = interpPixels(image2, trunc_proj[0], trunc_proj[1])
-    #             pix_val = image2[rounded_proj[0], rounded_proj[1], :]
-    #             image1[x + top_pad, y + left_pad, :] = np.mean(pix_val, axis=0)
     return image1
 
 
@@ -158,7 +208,8 @@ def forwardWarp(image1, image2, image1_features, image2_features) -> np.ndarray:
         :param image2_features: features in image2
         :return: The warped image
     """
-    h_matrix = computeHomography(image2_features, image1_features)
+    # h_matrix = ransac(image2_features, image1_features)
+    h_matrix, status = cv2.findHomography(image1_features, image2_features, cv2.RANSAC, 5.0)
 
     #################### Advanced Indexing ###########################
     x = np.arange(0, image2.shape[0], 1)
