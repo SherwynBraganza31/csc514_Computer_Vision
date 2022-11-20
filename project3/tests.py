@@ -169,5 +169,5 @@ if __name__ == '__main__':
     # tests.testForwardWarp()
     # tests.testInverseWarp()
     # tests.siftTest()
-    tests.panoramaTest()
+    # tests.panoramaTest()
     # tests.movieProjectionTest()

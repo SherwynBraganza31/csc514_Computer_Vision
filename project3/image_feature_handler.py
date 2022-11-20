@@ -30,6 +30,7 @@ def loadImage(dir_name: str) -> List[np.ndarray]:
         print('Directory name doesn\'t exist')
 
 
+
 def grabUsrClicks(image1: np.ndarray, image2: np.ndarray) -> (np.ndarray, np.ndarray):
     """
         Horizontally concatenates both the images and plots them in a clickable window and gets user

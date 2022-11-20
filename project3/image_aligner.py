@@ -3,6 +3,7 @@ import cv2
 import matplotlib.pyplot as plt
 from scipy.linalg import null_space
 
+
 def computeHomography(image1_features: np.ndarray, image2_features: np.ndarray) -> np.ndarray:
     """
         Calculates the H matrix or the homography for a given set of points based on the
@@ -33,6 +34,7 @@ def computeHomography(image1_features: np.ndarray, image2_features: np.ndarray) 
     ns = null_space(point_matrix)
 
     # print(np.sum(V[-1] ** 2))  # checking to see if the sum of squares is equal to one
+    # print(np.sum(V[-1] - null_space))
 
     h_matrix = V[-1].reshape(3,3)
     return h_matrix
