@@ -153,6 +153,6 @@ if __name__ == '__main__':
     # tests.testUsrClicks()
     # tests.testPresetFeatures()
     # tests.testForwardWarp()
-    # tests.testInverseWarp()
+    tests.testInverseWarp()
     # tests.siftTest()
     # tests.panoramaTest()

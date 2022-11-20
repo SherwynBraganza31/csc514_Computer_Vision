@@ -54,6 +54,8 @@ def testHomography(image1: np.ndarray, image1_features: np.ndarray,
     # get the homography matrix of projecting points from image2 to image1
     if h_matrix is None:
         h_matrix = computeHomography(image2_features, image1_features)
+    else:
+        h_matrix = np.linalg.inv(h_matrix)
 
     source_pts = np.vstack((image2_features.T, np.ones(image2_features.shape[0])))
     projections = computeProjection(h_matrix, source_pts)
@@ -72,7 +74,7 @@ def testHomography(image1: np.ndarray, image1_features: np.ndarray,
     return np.mean(squared_errors)
 
 
-def ransac(image1_features: np.ndarray, image2_features: np.ndarray, max_ite=100) -> np.ndarray:
+def ransac(image1_features: np.ndarray, image2_features: np.ndarray, max_ite=400) -> np.ndarray:
     best_homography = None
     best_mse = 10000
     iterations = 0
@@ -81,12 +83,14 @@ def ransac(image1_features: np.ndarray, image2_features: np.ndarray, max_ite=100
         random_idx = np.random.permutation(len(image1_features))[0:4]
         homography = computeHomography(image1_features[random_idx], image2_features[random_idx])
         mse = testHomography(np.zeros((10, 10)), image1_features, image2_features, h_matrix=homography)
+        iterations += 1
+        print(mse)
         if mse < best_mse:
             best_homography = homography
             best_mse = mse
 
-    if best_homography is None or best_mse > 10:
-        return computeHomography(image1_features, image2_features)
+    if best_homography is None or best_mse > 20:
+        return cv2.findHomography(image1_features, image2_features, cv2.RANSAC, 5.0)[0]
     else:
         return best_homography
 
@@ -122,11 +126,11 @@ def inverseWarp(image1, image2, image1_features, image2_features) -> np.ndarray:
         :param image2_features: features in image2
         :return: The warped image
     """
-    # h_matrix = ransac(image1_features, image2_features)
-    # h_inv = ransac(image2_features, image1_features)
+    h_matrix = ransac(image1_features, image2_features)
+    h_inv = ransac(image2_features, image1_features)
 
-    h_matrix, status = cv2.findHomography(image1_features, image2_features, cv2.RANSAC, 5.0)
-    h_inv, status = cv2.findHomography(image2_features, image1_features, cv2.RANSAC, 5.0)
+    # h_matrix, status = cv2.findHomography(image1_features, image2_features, cv2.RANSAC, 5.0)
+    # h_inv, status = cv2.findHomography(image2_features, image1_features, cv2.RANSAC, 5.0)
 
     ################# Image1 Padding based on projections of image2 ############################
     x_bound, y_bound = image2.shape[0], image2.shape[1] # get size of the second image
@@ -208,8 +212,8 @@ def forwardWarp(image1, image2, image1_features, image2_features) -> np.ndarray:
         :param image2_features: features in image2
         :return: The warped image
     """
-    # h_matrix = ransac(image2_features, image1_features)
-    h_matrix, status = cv2.findHomography(image1_features, image2_features, cv2.RANSAC, 5.0)
+    h_matrix = ransac(image2_features, image1_features)
+    # h_matrix, status = cv2.findHomography(image1_features, image2_features, cv2.RANSAC, 5.0)
 
     #################### Advanced Indexing ###########################
     x = np.arange(0, image2.shape[0], 1)
