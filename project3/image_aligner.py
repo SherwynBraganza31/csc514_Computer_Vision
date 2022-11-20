@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
+from scipy.linalg import null_space
 
 def computeHomography(image1_features: np.ndarray, image2_features: np.ndarray) -> np.ndarray:
     """
@@ -29,18 +30,23 @@ def computeHomography(image1_features: np.ndarray, image2_features: np.ndarray) 
         point_matrix[2*idx+1, :] = np.asarray([0, 0, 0, x_s, y_s, 1, -y_d * x_s, -y_d * y_s, -y_d])
 
     U, S, V = np.linalg.svd(point_matrix)
-    # print(np.sum(V[-1] ** 2))
+    ns = null_space(point_matrix)
+
+    # print(np.sum(V[-1] ** 2))  # checking to see if the sum of squares is equal to one
 
     h_matrix = V[-1].reshape(3,3)
     return h_matrix
 
 
 def testHomography(image1: np.ndarray, image1_features: np.ndarray,
-                   image2_features: np.ndarray, plot=False, h_matrix=None):
+                   image2_features: np.ndarray, plot=False, h_matrix=None) -> float:
     """
-        Tests the homography or h-matrix by plotting the original feature points from image1
-        and the projection of the feature points in image2, on image1.
-        Also prints out the mean squared error
+        Tests the homography or h-matrix by comparing the points in features
+        in image1 with the projections of the corresponding features of image2
+        on image1. If plot is true, it plots the projections over the original
+        feature points. It also calculates the mean squared error that arises from
+        this and returns it
+
 
         Author: Sherwyn Braganza
 
@@ -49,7 +55,7 @@ def testHomography(image1: np.ndarray, image1_features: np.ndarray,
         :param image2_features: feature points of the second image
         :param plot: Whether to plot the result or just return the MSE
         :param h_matrix: optional variable if the user wants to provide the homography
-        :return None
+        :return The mean squared error
     """
     # get the homography matrix of projecting points from image2 to image1
     if h_matrix is None:
@@ -75,16 +81,34 @@ def testHomography(image1: np.ndarray, image1_features: np.ndarray,
 
 
 def ransac(image1_features: np.ndarray, image2_features: np.ndarray, max_ite=400) -> np.ndarray:
+    """
+        Implements RANSAC to find the best homography.
+
+        Chooses 4 feature pairs at random and computes the homography. It then tests the obtained
+        homography using mean sqaured error as a metric. Picks the best mean sqaured error that
+        is below a certain threshold. If none can be found, it uses CV2's homography calculator with
+        the inbuilt ransac and returns the result
+
+        :param image1_features: features in image1
+        :param image2_features: features in image2
+        :param max_ite: the maximum number of iterations to run RANSAC
+        :return: The best homography Matrix
+    """
     best_homography = None
     best_mse = 10000
     iterations = 0
 
     while iterations < max_ite:
+        # get a random permutation of point indexes
         random_idx = np.random.permutation(len(image1_features))[0:4]
+
+        # get the homography pertaining to those feature pairs
         homography = computeHomography(image1_features[random_idx], image2_features[random_idx])
+
+        # get the mse tied to that h_matrix
         mse = testHomography(np.zeros((10, 10)), image1_features, image2_features, h_matrix=homography)
         iterations += 1
-        print(mse)
+
         if mse < best_mse:
             best_homography = homography
             best_mse = mse
@@ -106,7 +130,7 @@ def computeProjection(h_matrix: np.ndarray, p_source: np.ndarray) -> np.ndarray:
         :return: The destinantion point
     """
     pt_projection = np.matmul(h_matrix, p_source)
-    pt_projection = pt_projection / pt_projection[-1]
+    pt_projection = pt_projection / pt_projection[-1]  # normalization step
 
     return pt_projection
 
@@ -129,9 +153,6 @@ def inverseWarp(image1, image2, image1_features, image2_features) -> np.ndarray:
     h_matrix = ransac(image1_features, image2_features)
     h_inv = ransac(image2_features, image1_features)
 
-    # h_matrix, status = cv2.findHomography(image1_features, image2_features, cv2.RANSAC, 5.0)
-    # h_inv, status = cv2.findHomography(image2_features, image1_features, cv2.RANSAC, 5.0)
-
     ################# Image1 Padding based on projections of image2 ############################
     x_bound, y_bound = image2.shape[0], image2.shape[1] # get size of the second image
     original_shape = image1.shape
@@ -149,7 +170,7 @@ def inverseWarp(image1, image2, image1_features, image2_features) -> np.ndarray:
 
     # compute pad parameters and pad the image
     left_pad = -bound_min[1] if bound_min[1] < 0 else 0
-    right_pad = bound_max[1] - image1.shape[1] + 1 if bound_max[1] > image1.shape[1]  else 0
+    right_pad = bound_max[1] - image1.shape[1] + 1 if bound_max[1] > image1.shape[1] else 0
     top_pad = -bound_min[0] if bound_min[0] < 0 else 0
     bottom_pad = bound_max[0] - image1.shape[0] + 1 if bound_max[0] > image1.shape[0] else 0
     pad_params = ((top_pad, bottom_pad), (left_pad, right_pad), (0, 0))
@@ -179,6 +200,7 @@ def inverseWarp(image1, image2, image1_features, image2_features) -> np.ndarray:
     y = y + left_pad
 
     #################### Padding image2 #############################
+    # checks for the max values in the meshgrid translation and pads as a secondary check
     bound_min = xx.min(), yy.min()
     bound_max = xx.max(), yy.max()
 

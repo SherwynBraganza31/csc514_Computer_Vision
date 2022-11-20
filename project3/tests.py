@@ -147,12 +147,27 @@ class Tests:
 
         skimage.io.imsave('quad_merged.jpg', image1)
 
+    def movieProjectionTest(self):
+        images = loadImage('P2_Benchmarks/screen_warp')
+        img1_clicks, img2_clicks = grabUsrClicks(images[0], skimage.img_as_ubyte(np.ones(images[0].shape)))
+        img2_clicks = np.asarray([[0,0], [0, images[1].shape[1]], [images[1].shape[0], images[1].shape[1]],
+                       [images[1].shape[0], 0]])
+        image1 = inverseWarp(images[0], images[1], img1_clicks, img2_clicks)
+        plt.imshow(image1)
+        plt.show()
+
+
 
 if __name__ == '__main__':
+
+    # RUN ONLY ONE TEST AT TIME
+    # BUGS IN DIRECTORY INDEXING
+
     tests = Tests()
     # tests.testUsrClicks()
     # tests.testPresetFeatures()
     # tests.testForwardWarp()
-    tests.testInverseWarp()
+    # tests.testInverseWarp()
     # tests.siftTest()
-    # tests.panoramaTest()
+    tests.panoramaTest()
+    # tests.movieProjectionTest()
