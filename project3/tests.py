@@ -1,3 +1,5 @@
+import skimage.io
+
 from image_aligner import *
 from image_feature_handler import *
 
@@ -79,9 +81,8 @@ class Tests:
                                   [918.62544803, 886.59677419],
                                   [1165.93727599, 909.89426523]])
 
-        image1 = forwardWarp(images[0], images[1], img1_clicks, img2_clicks)
-        plt.imshow(image1)
-        plt.show()
+        image1 = forwardWarp(images[3], images[4], img1_clicks, img2_clicks)
+        skimage.io.imsave('forwardWarp.jpg', image1)
 
         return
 
@@ -114,17 +115,16 @@ class Tests:
                                   [1165.93727599, 909.89426523]])
 
         image1 = inverseWarp(images[3], images[4], img1_clicks, img2_clicks)
-        plt.imshow(image1)
-        plt.show()
+        skimage.io.imsave('inverseWarp.jpg', image1)
 
         return
 
     def siftTest(self):
         images = loadImage(self.dir_name)
         image1_features, image2_features = getFeatures(images[0], images[1])
-        image1 = forwardWarp(images[0], images[1], image1_features, image2_features)
-        plt.imshow(image1)
-        plt.show()
+        testHomography(images[3], image1_features, image2_features, plot=True)
+        image1 = inverseWarp(images[3], images[4], image1_features, image2_features)
+        skimage.io.imsave('siftTest.jpg', image1)
 
     def panoramaTest(self):
         self.dir_name = 'P2_Benchmarks/test'
@@ -138,7 +138,6 @@ class Tests:
             image1_features, image2_features = getFeatures(image1, image2)
             image1 = inverseWarp(image1, image2, image1_features, image2_features)
             plt.imshow(image1)
-
         for idx in range(mid+1, len(images)-1):
             print('Merging main image and {}'.format(idx))
             image2 = images[idx]
@@ -147,15 +146,20 @@ class Tests:
 
         skimage.io.imsave('quad_merged.jpg', image1)
 
-    def movieProjectionTest(self):
-        images = loadImage('P2_Benchmarks/screen_warp')
-        img1_clicks, img2_clicks = grabUsrClicks(images[0], skimage.img_as_ubyte(np.ones(images[0].shape)))
-        img2_clicks = np.asarray([[0,0], [0, images[1].shape[1]], [images[1].shape[0], images[1].shape[1]],
-                       [images[1].shape[0], 0]])
-        image1 = inverseWarp(images[0], images[1], img1_clicks, img2_clicks)
-        plt.imshow(image1)
-        plt.show()
+    def frameProjectionTest(self):
+        images = loadImage('P2_Benchmarks/frameProjection')
+        img1_clicks, img2_clicks = grabUsrClicks(images[0],
+                                                 skimage.img_as_ubyte(skimage.transform.resize(images[1],
+                                                                          images[0].shape, anti_aliasing=True)))
+        img1_clicks[:, [0,1]] = img1_clicks[:, [1,0]]
+        img2_clicks = np.asarray([[0, 0],
+                                  [0, images[1].shape[1]],
+                                  [images[1].shape[0], images[1].shape[1]],
+                                  [images[1].shape[0], 0]])
 
+        testHomography(images[0], img1_clicks, img2_clicks, plot=True)
+        image1 = forwardWarp(images[0], images[1], img1_clicks, img2_clicks)
+        plt.imsave('frameProjection.jpg', image1)
 
 
 if __name__ == '__main__':
@@ -170,4 +174,4 @@ if __name__ == '__main__':
     # tests.testInverseWarp()
     # tests.siftTest()
     # tests.panoramaTest()
-    # tests.movieProjectionTest()
+    tests.frameProjectionTest()

@@ -271,7 +271,7 @@ def forwardWarp(image1, image2, image1_features, image2_features) -> np.ndarray:
     yy = (yy + left_pad).reshape(y.shape)
 
     image1[xx, yy, :] = image2[x, y, :]
-    image1 = image1[top_pad: top_pad + image2.shape[0], :]
+    image1 = image1[top_pad: top_pad + image2.shape[0], :]  # clipping the top regions
 
 
     ############### Regular slow indexing ###################
@@ -285,20 +285,6 @@ def forwardWarp(image1, image2, image1_features, image2_features) -> np.ndarray:
     return image1
 
 
-def interpPixels(image, x, y):
-    """
-        Interpolates the pixels
-        :param image:
-        :param x:
-        :param y:
-        :return:
-    """
-    proj_x, proj_y = np.arange(x - 1, x + 2, 1), np.arange(y - 1, y + 2, 1)
-    xx, yy = np.meshgrid(x, y)
-    values = image[xx, yy, :]
-    # gaussian = [0.25, 0.5, 0.25]
-
-    return np.mean(values, axis=0)
 
 
 

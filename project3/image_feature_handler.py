@@ -25,9 +25,12 @@ def loadImage(dir_name: str) -> List[np.ndarray]:
             # check if the file listed is an image file, if it is, load else not.
             if '.jpg' in x.lower():
                 image_array.append(skimage.io.imread(x))
+
+        os.chdir("../../")
         return image_array
     else:
         print('Directory name doesn\'t exist')
+        os.chdir("../../")
 
 
 
