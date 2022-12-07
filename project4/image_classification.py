@@ -15,7 +15,6 @@ from typing import List
 import cv2
 from skimage import io
 import matplotlib
-import typing
 
 
 path_list = [fn for fn in os.listdir("Archive/TrainingImages/TrainingImages/")]
@@ -72,12 +71,37 @@ def createManifold(image_list, typ):
         X = getImageSpace(fn)
         if typ == "L":
             U, S, V = np.linalg.svd(X, full_matrices=False)
-            k, recon_list = ComputeER(X, S, 0.9)
+            k, energy_list = ComputeER(X, S, 0.9)
             manifold = np.hstack((manifold, U[:, 0:k]))
         else:
             manifold = np.hstack((manifold, X)) 
          
     return manifold
+
+
+def getUnbiasedDataset(image_space:np.ndarray) -> np.ndarray:
+    """
+        Gets the unbiased image_space matrix from the biased image_space.
+        Calculates the mean pixel value for each pixel and then subtracts it
+        from the biased_image space
+
+        :param image_space: The biased image space
+        :return: the unbiased image space
+    """
+    mean_image = np.sum(image_space, axis=1)
+    return image_space - mean_image
+
+
+def getBasisVectors(image_space: np.ndarray, k: int) -> np.ndarray:
+    """
+        Gets the first 'k' eigenvectors of the imagespace
+        :param image_space: The image space matrix
+        :param k: The rank of eigenvectors to be chosen
+        :return: k row matrix in which each row corresponds to an eigenvector
+    """
+    U, S, V = np.linalg.svd(image_space, full_matrices=False)
+
+    return U[k]
 
 
 def plotEnergyRecovery(imagelist):
