@@ -20,7 +20,7 @@ import matplotlib
 path_list = [fn for fn in os.listdir("Archive/TrainingImages/TrainingImages/")]
 
 
-def getImageSpace(folder_name: str)->np.ndarray:
+def getImageSpace(folder_name: str) -> np.ndarray:
     """
         Load all the train images from a folder and stack them together horizontally
         to create X matrix or image_space matrix
@@ -32,13 +32,13 @@ def getImageSpace(folder_name: str)->np.ndarray:
     for i in range(128):
         img = io.imread(f"Archive/TrainingImages/TrainingImages/{folder_name}/UnProcessed/img_{i}.png")
         img = img.reshape((-1, 1))
-        image_space = np.hstack((image_space,img))
+        image_space = np.hstack((image_space, img))
         
     #print(image_space.shape)
     return image_space
 
 
-def ComputeER(X: np.ndarray, singular_vals, thresh: float) -> tuple:
+def computeER(X: np.ndarray, singular_vals, thresh: float) -> tuple:
     """
         Computes the order of eigenvalues required to achieve a
         energy reconstruction specified by thresh.
@@ -60,26 +60,33 @@ def ComputeER(X: np.ndarray, singular_vals, thresh: float) -> tuple:
     return len(ratio_list), ratio_list
     
 
-def createManifold(image_list, typ):
-    """
+# def createManifold(image_list, typ):
+#     """
+#
+#         :param typ: L for local manifold construction, G for global
+#         :return:
+#     """
+#     manifold = np.zeros((128*128, 0))
+#     for fn in image_list:
+#         X = getImageSpace(fn)
+#         if typ == "L":
+#             U, S, V = np.linalg.svd(X, full_matrices=False)
+#             k, energy_list = ComputeER(X, S, 0.9)
+#             manifold = np.hstack((manifold, U[:, 0:k]))
+#         else:
+#             manifold = np.hstack((manifold, X))
+#
+#     return manifold
 
-        :param typ: L for local manifold construction, G for global
-        :return:
-    """
-    manifold = np.zeros((128*128, 0))
-    for fn in image_list:
-        X = getImageSpace(fn)
-        if typ == "L":
-            U, S, V = np.linalg.svd(X, full_matrices=False)
-            k, energy_list = ComputeER(X, S, 0.9)
-            manifold = np.hstack((manifold, U[:, 0:k]))
-        else:
-            manifold = np.hstack((manifold, X)) 
-         
+def createManifold(image_space):
+    k = 3
+    # k, _ = computeER(image_space, singular_vals, 0.9)
+    eigen_vectors = getBasisVectors(image_space, k)
+    manifold = np.dot(image_space.T, eigen_vectors)
+
     return manifold
 
-
-def getUnbiasedDataset(image_space:np.ndarray) -> np.ndarray:
+def getUnbiasedDataset(image_space: np.ndarray) -> np.ndarray:
     """
         Gets the unbiased image_space matrix from the biased image_space.
         Calculates the mean pixel value for each pixel and then subtracts it
