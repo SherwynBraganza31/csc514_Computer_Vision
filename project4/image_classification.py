@@ -56,13 +56,13 @@ def loadTestImage(folder_name: str, grab_entire=False) -> np.ndarray:
     if grab_entire:
         for file in path_list:
             for i in range(128):
-                img = skimage.io.imread(f"Archive/TestImages/TestImages/{file}/UnProcessed/img_{i}.png",
+                img = skimage.io.imread(f"Archive/TestImages/TestImages/{file[0:-2]}32/UnProcessed/img_{i}.png",
                                         as_gray=True)
                 img = img.reshape((-1, 1))
                 image_space = np.hstack((image_space, img))
     else:
         for i in range(128):
-            img = io.imread(f"Archive/TestImages/TestImages/{folder_name}/UnProcessed/img_{i}.png")
+            img = io.imread(f"Archive/TestImages/TestImages/{folder_name[0:-2]}32/UnProcessed/img_{i}.png")
             img = img.reshape((-1, 1))
             image_space = np.hstack((image_space, img))
 
@@ -133,7 +133,7 @@ def plotEnergyRecovery(imagelist):
 
 
 def findClass(manifolds, eigen_vectors,  test_image):
-    test_projection = np.dot(test_image, eigen_vectors['global'])
+    test_projection = np.dot(test_image.T, eigen_vectors['global'])
     min_distance = float('-inf')
     min_idx = 0
 
@@ -159,7 +159,7 @@ def plotEigVector(eig_vec, name: str, show=False):
 if __name__ == '__main__':
     manifolds = {}
     eigen_vectors = {}
-    for obj in path_list[0:8]:
+    for obj in path_list:
         mani, eig = createManifold(getImageSpace(obj))
         manifolds.update({obj: mani})
         eigen_vectors.update({obj: eig})
@@ -176,5 +176,6 @@ if __name__ == '__main__':
     # plotEigVector(eigen_vectors['global'][:, 0], 'global_first')
     # plotEigVector(eigen_vectors['global'][:, 3], 'global_other')
 
-    obj = findClass(manifolds, eigen_vectors, np.zeros((128*128)))
-    test_images = loadTestImage(path_list[0])
+    test_images = loadTestImage(path_list[4])
+    obj = findClass(manifolds, eigen_vectors, test_images[6])
+
